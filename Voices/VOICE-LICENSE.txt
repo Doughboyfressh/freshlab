@@ -1,0 +1,26 @@
+FreshLab Original Voices and Built-in Speech Output — CC0 1.0 Universal
+
+This dedication covers:
+- The 24 WAV files in Voices/ created by scripts/make_voices.py.
+- The eight WAV files in Examples/Voices/ created by the original C++ speech
+  synthesizer in Source/Core/Speech.h.
+- Original audio output generated solely by FreshLab's built-in oscillator,
+  noise and formant voice synthesis, and the included audio previews.
+
+No human recordings, trained voice models or third-party audio samples were
+used to create these original sounds. They are stylized electronic voices.
+
+To the extent copyright or related rights exist in these original sounds,
+the project dedicates them to the public domain under CC0 1.0 Universal.
+You may use, copy, modify, sample, sell, distribute and perform them for
+personal or commercial purposes without attribution or royalty payments.
+This includes songs, videos, games, sound packs, derivative voices, and
+sharing or reselling the original WAVs. No exclusivity is claimed.
+
+This dedication does not change other laws or third-party rights and does
+not apply to recordings imported from other sources. The source code and
+third-party software dependencies have their separate licenses.
+
+CC0 deed: https://creativecommons.org/publicdomain/zero/1.0/
+Full legal code: CC0-1.0.txt in this folder, or
+https://creativecommons.org/publicdomain/zero/1.0/legalcode

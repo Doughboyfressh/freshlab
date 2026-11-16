@@ -1,0 +1,198 @@
+{
+  "pack": "FreshLab Original Voices 0.1",
+  "synthesis": "Deterministic oscillators, noise, parallel formants; no recordings or speaker models",
+  "voices": [
+    {
+      "file": "circuit_ah.wav",
+      "sample_rate": 44100,
+      "frames": 25136,
+      "duration_seconds": 0.57,
+      "sha256": "60c0a0b5dcaff4274577d9d3904325fab0ffa9efd0d524708534970c986e58ae",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "circuit_brr.wav",
+      "sample_rate": 44100,
+      "frames": 29105,
+      "duration_seconds": 0.66,
+      "sha256": "a51b7180ac5bcf3fe12d6ee8bd5a2b35e357ab3e87a8fbfe2c3cbf802fa67991",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "circuit_go.wav",
+      "sample_rate": 44100,
+      "frames": 27562,
+      "duration_seconds": 0.625,
+      "sha256": "190e81564664a775352b4c1dab91e9c5d558476413b0d6a43db86aa07d00ca99",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "circuit_hey.wav",
+      "sample_rate": 44100,
+      "frames": 27121,
+      "duration_seconds": 0.615,
+      "sha256": "72b7111c5d97632713326123adf3ed63636c982878e272e8c570a15f785f14c7",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "circuit_whoa.wav",
+      "sample_rate": 44100,
+      "frames": 33516,
+      "duration_seconds": 0.76,
+      "sha256": "b60e8fd0386c1bf3153012b758657ac269f9a359ce5f7914a7436eda38bf737e",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "circuit_yeah.wav",
+      "sample_rate": 44100,
+      "frames": 29547,
+      "duration_seconds": 0.67,
+      "sha256": "885efb49ade6b6c2dbf8e57d739aae64e3fb64cde8368faf446643b1312a8112",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "haze_ah.wav",
+      "sample_rate": 44100,
+      "frames": 25136,
+      "duration_seconds": 0.57,
+      "sha256": "9c6da32e461c597430838faab214489d9c789370caf657260b2a60aa07094cc5",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "haze_brr.wav",
+      "sample_rate": 44100,
+      "frames": 29105,
+      "duration_seconds": 0.66,
+      "sha256": "59563005b5ab7a5d5c7560a1a1bcc4bec7c3c0fe03a739f90963f39aff3cc214",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "haze_go.wav",
+      "sample_rate": 44100,
+      "frames": 27562,
+      "duration_seconds": 0.625,
+      "sha256": "459225d863cbede9a7aa23adc97461d66d3529655eb99ae31d328dd201e3aef1",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "haze_hey.wav",
+      "sample_rate": 44100,
+      "frames": 27121,
+      "duration_seconds": 0.615,
+      "sha256": "be3dde0ae35bc8c1a2b9ae0fd8c904bcbfedad5789d6db1796ea7ff4df36f246",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "haze_whoa.wav",
+      "sample_rate": 44100,
+      "frames": 33516,
+      "duration_seconds": 0.76,
+      "sha256": "3d23b7ffb9203f33d8ea18a0d381a9e9c09dbc35629aab2a32b65e1ed36898a8",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "haze_yeah.wav",
+      "sample_rate": 44100,
+      "frames": 29547,
+      "duration_seconds": 0.67,
+      "sha256": "7212ae93be68a4ccb0181003a69061b8f8520ae56fe2f55910cca577fa3861e2",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "spark_ah.wav",
+      "sample_rate": 44100,
+      "frames": 25136,
+      "duration_seconds": 0.57,
+      "sha256": "4492a676b033456e019f0926d6234172f4bac9af39764ccca17a5ba2bc6ccd0e",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "spark_brr.wav",
+      "sample_rate": 44100,
+      "frames": 29105,
+      "duration_seconds": 0.66,
+      "sha256": "521f3f94a85e90ab7b0e6eaeb43e88ecd63a20fe41ac416c90e885d59f58eecf",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "spark_go.wav",
+      "sample_rate": 44100,
+      "frames": 27562,
+      "duration_seconds": 0.625,
+      "sha256": "d720dec928ada12916a990ef8ba012eaad81a31802b86afc2b8451384b901080",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "spark_hey.wav",
+      "sample_rate": 44100,
+      "frames": 27121,
+      "duration_seconds": 0.615,
+      "sha256": "65eb629fe2db7a357806d6ac8ec89b3131c0790e03aee6f195ca5e26c6cdc149",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "spark_whoa.wav",
+      "sample_rate": 44100,
+      "frames": 33516,
+      "duration_seconds": 0.76,
+      "sha256": "9ca3705d6e81ab2e5d9bdd639336dc8fef5d59f0e7e00ba99faf4cf9697901ff",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "spark_yeah.wav",
+      "sample_rate": 44100,
+      "frames": 29547,
+      "duration_seconds": 0.67,
+      "sha256": "3f977278849bc27052e61effb7f06c7a5f416a42842fb666ca69d3dd9683dbed",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "sub_ah.wav",
+      "sample_rate": 44100,
+      "frames": 25136,
+      "duration_seconds": 0.57,
+      "sha256": "91e2ce8002fc3435dd3b61b3a12f9fbe21aa46824c1736c1b1e8c25f675cb060",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "sub_brr.wav",
+      "sample_rate": 44100,
+      "frames": 29105,
+      "duration_seconds": 0.66,
+      "sha256": "4fc7d2d78267b20967f1c7bddc01e4ec3d72907d19231778e9b8a783f46c06a4",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "sub_go.wav",
+      "sample_rate": 44100,
+      "frames": 27562,
+      "duration_seconds": 0.625,
+      "sha256": "4695e1162625275917ac16c172b7ac20336c0859cd136d938ae768e3011740db",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "sub_hey.wav",
+      "sample_rate": 44100,
+      "frames": 27121,
+      "duration_seconds": 0.615,
+      "sha256": "eb37b46c45ae0ff13f4cf57836b484ddf00471fbba2fe443557c435427235f9c",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "sub_whoa.wav",
+      "sample_rate": 44100,
+      "frames": 33516,
+      "duration_seconds": 0.76,
+      "sha256": "2e74c6045f327c522bf73d4d8aacf85c1c65ddbe3e29efc788c1760157a98b11",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "sub_yeah.wav",
+      "sample_rate": 44100,
+      "frames": 29547,
+      "duration_seconds": 0.67,
+      "sha256": "0ec38bf9f799947b84900086a0330601cd93c69fc4667f96e09d49b761c80ade",
+      "license": "CC0-1.0"
+    }
+  ]
+}

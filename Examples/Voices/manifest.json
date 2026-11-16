@@ -1,0 +1,94 @@
+{
+  "engine": "FreshLab 0.2 rule-based formant speech",
+  "license": "CC0-1.0",
+  "examples": [
+    {
+      "file": "sub_lets_go.wav",
+      "phrase": "Let's go",
+      "character": 0,
+      "pitch": -2,
+      "formant": 0.95,
+      "robot": 0.1,
+      "duration_seconds": 0.79,
+      "sha256": "0399f7d5ba3d04cca8c97eea415822124452a5e9477e33c50c4760152f01d856",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "spark_turn_it_up.wav",
+      "phrase": "Turn it up",
+      "character": 1,
+      "pitch": 1,
+      "formant": 1.1,
+      "robot": 0.05,
+      "duration_seconds": 0.8849,
+      "sha256": "90d4c59b1711006ea06ab0b3c732bba3c4891288a335b1d4f14e77e1cbc9f7d9",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "haze_we_outside.wav",
+      "phrase": "We outside",
+      "character": 2,
+      "pitch": -1,
+      "formant": 1,
+      "robot": 0.25,
+      "duration_seconds": 1.01,
+      "sha256": "d5772f4c1696ffa52e5ca3de4803acfe9e9a9f9f802a6a93a130e9f10512ae0d",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "circuit_freshlab.wav",
+      "phrase": "FreshLab",
+      "character": 3,
+      "pitch": -3,
+      "formant": 1.2,
+      "robot": 0.8,
+      "duration_seconds": 0.68,
+      "sha256": "1f1caba250da8a6043a3259d83ac84c039de2835100799d68e337918d13ae971",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "sub_money.wav",
+      "phrase": "Money",
+      "character": 0,
+      "pitch": -6,
+      "formant": 0.85,
+      "robot": 0.2,
+      "duration_seconds": 0.495,
+      "sha256": "2792af5323cac94c5fe58b04a7843d3f73d848e364060b8452155079181eabf4",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "spark_okay.wav",
+      "phrase": "Okay",
+      "character": 1,
+      "pitch": 3,
+      "formant": 1.2,
+      "robot": 0.1,
+      "duration_seconds": 0.52,
+      "sha256": "9cf4249f4330c83a5c53eb85256526e842dc040c2e9e0a626ac59ef5a220cd1d",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "haze_yeah.wav",
+      "phrase": "Yeah",
+      "character": 2,
+      "pitch": -4,
+      "formant": 0.9,
+      "robot": 0.35,
+      "duration_seconds": 0.4,
+      "sha256": "6fab04a8f59ea5396e220a7195e26c05ee7153ff3a74ed4c8da418fabf7d6c2d",
+      "license": "CC0-1.0"
+    },
+    {
+      "file": "circuit_go.wav",
+      "phrase": "Go go go",
+      "character": 3,
+      "pitch": 0,
+      "formant": 1.3,
+      "robot": 0.95,
+      "duration_seconds": 1.1899,
+      "sha256": "1d70667fc46116733f69b65cb04162f0e32fef6aa621403f818740876ec24624",
+      "license": "CC0-1.0"
+    }
+  ]
+}
