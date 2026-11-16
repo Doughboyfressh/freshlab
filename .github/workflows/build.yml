@@ -5,6 +5,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
 jobs:
   build:
     strategy:
@@ -27,6 +30,24 @@ jobs:
         run: cmake --build build --config Release --parallel 2
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
+        env:
+          FRESHLAB_SNAPSHOT_DIR: ${{ github.workspace }}/build/previews/ui
+      - name: Upload test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FreshLab-test-logs-${{ runner.os }}
+          path: build/Testing/Temporary/
+          retention-days: 30
+      - name: Render audio previews
+        run: python scripts/make_previews.py --build-dir build --output-dir build/previews
+      - name: Upload previews
+        uses: actions/upload-artifact@v4
+        with:
+          name: FreshLab-previews-${{ runner.os }}
+          path: build/previews/
+          if-no-files-found: error
+          retention-days: 30
       - name: Package plugins, voices and matching source
         run: python scripts/package.py --build-dir build --output-dir dist
       - name: Upload download package
