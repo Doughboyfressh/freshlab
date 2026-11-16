@@ -13,31 +13,54 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2022, macos-15]
+        os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Select Windows x64 compiler
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
       - name: Configure Windows x64
         if: runner.os == 'Windows'
-        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+        run: cmake -S . -B build -G "Ninja Multi-Config"
       - name: Configure macOS universal
         if: runner.os == 'macOS'
         run: cmake -S . -B build -G Xcode -DCMAKE_OSX_ARCHITECTURES='arm64;x86_64' -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
       - name: Compile
         run: cmake --build build --config Release --parallel 2
       - name: Test
-        run: ctest --test-dir build -C Release --output-on-failure
+        run: |
+          python -c "from pathlib import Path; Path('build/reports').mkdir(parents=True, exist_ok=True)"
+          ctest --test-dir build -C Release --output-on-failure --output-junit "${{ github.workspace }}/build/reports/ctest.xml"
         env:
           FRESHLAB_SNAPSHOT_DIR: ${{ github.workspace }}/build/previews/ui
+          FRESHLAB_TEST_SYSTEM_SPEECH: 1
       - name: Upload test diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: FreshLab-test-logs-${{ runner.os }}
           path: build/Testing/Temporary/
+          retention-days: 30
+      - name: Validate Windows VST3 hosting
+        if: runner.os == 'Windows'
+        run: python scripts/validate_plugins.py --build-dir build
+      - name: Validate Mac VST3 and AU hosting
+        if: runner.os == 'macOS'
+        run: python scripts/validate_plugins.py --build-dir build --auval
+      - name: Measure native audio processing
+        run: python scripts/benchmark.py --build-dir build
+      - name: Upload validation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FreshLab-validation-${{ runner.os }}
+          path: build/reports/
           retention-days: 30
       - name: Render audio previews
         run: python scripts/make_previews.py --build-dir build --output-dir build/previews

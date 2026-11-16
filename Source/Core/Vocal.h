@@ -1,40 +1,47 @@
 #pragma once
-#include <algorithm>
-#include <array>
-#include <cmath>
-#include <vector>
+#include "Processing.h"
+#include "PitchTracker.h"
+#include "LiveVocal.h"
+#include "../ThirdParty/signalsmith-stretch.h"
 namespace fresh {
-// Dual moving delay taps; all buffers are allocated in prepare().
+// Phase-coherent spectral layers with formant compensation and aligned dry audio.
+// FFT plans and buffers are allocated before audio processing.
 class VocalLayers {
-    double rate=44100;std::array<std::vector<float>,2> history;size_t write=0;
-    std::array<double,3> phase{.25,.15,.65};
-    double windowSamples=2646,periodSamples=275.625;int sinceCrossing=0;float previous=0;
-    float read(int channel,double delay)const {
-        const auto& h=history[size_t(channel)];double index=double(write)+h.size()-delay;
-        index=std::fmod(index,double(h.size()));if(index<0)index+=h.size();
-        const auto n=size_t(index);const float f=float(index-n);return h[n]*(1-f)+h[(n+1)%h.size()]*f;
-    }
-    float shifted(int channel,int tap,double base)const {
-        const double p=phase[size_t(tap)],q=p<.5?p+.5:p-.5;
-        const double w=std::pow(std::sin(3.141592653589793*p),2);
-        return float(read(channel,base+p*windowSamples)*w+read(channel,base+q*windowSamples)*(1-w));
-    }
+    using Shifter=signalsmith::stretch::SignalsmithStretch<float>;
+    static constexpr int chunk=32;
+    std::array<Shifter,4> shifts{{Shifter(101),Shifter(102),Shifter(103),Shifter(104)}};
+    std::array<std::array<float,chunk>,2> input{};
+    std::array<std::array<std::array<float,chunk>,2>,4> output{};
+    LiveVocalLayers live;int mode=0;
+    PitchTracker tracker;double sampleRate=44100;float tune=0,correctionMix=0;
+    StereoDelay dry;int position=0,delaySamples=0;float doubleLevel=0,harmonyLevel=0,slew=.002f;
 public:
-    void prepare(double sr){rate=sr;for(auto& h:history)h.assign(size_t(sr*.16)+8,0);reset();}
-    void reset(){for(auto& h:history)std::fill(h.begin(),h.end(),0);write=0;phase={.25,.15,.65};windowSamples=rate*.06;periodSamples=rate/160;sinceCrossing=0;previous=0;}
-    void process(float& l,float& r,float doubles,float harmony,float semitones,float width){
-        history[0][write]=l;history[1][write]=r;
-        // Align the grain length to an estimated input period for steadier monophonic notes.
-        const float mono=(l+r)*.5f;if(sinceCrossing<int(rate))++sinceCrossing;
-        if(mono>0&&previous<=0){if(sinceCrossing>rate/1200&&sinceCrossing<rate/35)periodSamples+=.2*(sinceCrossing-periodSamples);sinceCrossing=0;}
-        previous=mono;
-        const double wanted=periodSamples*std::max(1.0,std::round(rate*.06/periodSamples));windowSamples+=.0005*(wanted-windowSamples);
-        if(doubles>0){l+=shifted(0,1,rate*.015)*doubles*.65f;r+=shifted(1,2,rate*.023)*doubles*.65f;}
-        if(harmony>0){l+=shifted(0,0,rate*.008)*harmony*.7f;r+=shifted(1,0,rate*.008)*harmony*.7f;}
-        const float mid=(l+r)*.5f,side=(l-r)*.5f*std::clamp(width,0.0f,2.0f);l=mid+side;r=mid-side;
-        const double ratios[]{std::exp2(semitones/12),std::exp2(.07/12),std::exp2(-.09/12)};
-        for(int i=0;i<3;++i){phase[size_t(i)]+=(1-ratios[i])/windowSamples;phase[size_t(i)]-=std::floor(phase[size_t(i)]);}
-        if(++write==history[0].size())write=0;
+    int latency(int quality=0)const{return quality==1?delaySamples:0;}
+    void prepare(double rate){sampleRate=rate;live.prepare(rate);tracker.prepare(rate);int block=512;while(block<rate*.07)block*=2;
+        for(auto& shift:shifts)shift.configure(2,block,block/4,true);
+        delaySamples=shifts[0].inputLatency()+shifts[0].outputLatency()+chunk;
+        dry.prepare(delaySamples);slew=float(1-std::exp(-1/(rate*.015)));reset();}
+    void reset(){live.reset();for(auto& shift:shifts)shift.reset();input={};output={};position=0;
+        if(mode==1){std::array<std::array<float,chunk>,2> silence{},discard{};
+            for(size_t i=1;i<shifts.size();++i){int remaining=int(i)*shifts[i].intervalSamples()/4;
+                while(remaining>0){const int n=std::min(chunk,remaining);shifts[i].process(silence,n,discard,n);remaining-=n;}}}doubleLevel=harmonyLevel=0;tune=correctionMix=0;tracker.reset();dry.reset();}
+    void process(float& l,float& r,float doubles,float harmony,float semitones,float width,float formant=1,bool preserve=true,float tuneAmount=0,int key=0,int scale=0,float tuneSpeed=60,int quality=0){
+        if(quality!=mode){mode=quality;reset();}
+        if(mode==0){doubleLevel+=slew*(doubles-doubleLevel);harmonyLevel+=slew*(harmony-harmonyLevel);live.process(l,r,doubleLevel,harmonyLevel,semitones,width);return;}
+        if(tuneAmount>0||harmony>0||doubles>0)tracker.process((l+r)*.5f);
+        input[0][size_t(position)]=l;input[1][size_t(position)]=r;dry.process(l,r);
+        correctionMix+=slew*((tuneAmount>0?1.f:0.f)-correctionMix);l+=(output[3][0][size_t(position)]-l)*correctionMix;r+=(output[3][1][size_t(position)]-r)*correctionMix;
+        doubleLevel+=slew*(doubles-doubleLevel);harmonyLevel+=slew*(harmony-harmonyLevel);
+        l+=harmonyLevel*.7f*output[0][0][size_t(position)]+doubleLevel*.325f*(output[1][0][size_t(position)]+output[2][0][size_t(position)]);
+        r+=harmonyLevel*.7f*output[0][1][size_t(position)]+doubleLevel*.325f*(output[1][1][size_t(position)]+output[2][1][size_t(position)]);
+        if(width!=1){const float mid=(l+r)*.5f,side=(l-r)*.5f*std::clamp(width,0.0f,2.0f);l=mid+side;r=mid-side;}
+        if(++position==chunk){position=0;
+            const float wanted=tracker.certainty()>.8f?PitchTracker::correction(tracker.frequency(),key,scale)*tuneAmount:0;
+            tune+=float(1-std::exp(-chunk/(sampleRate*std::max(1.f,tuneSpeed)*.001)))*(wanted-tune);
+            const float pitches[]{semitones+tune,.07f+tune,-.09f+tune,tune};
+            for(size_t i=0;i<shifts.size();++i){if((i==0?harmonyLevel:(i==3?correctionMix:doubleLevel))<1.0e-6f){output[i]={};continue;}
+                shifts[i].setTransposeSemitones(pitches[i]);if(tracker.frequency()>0)shifts[i].setFormantBase(float(tracker.frequency()/sampleRate));else shifts[i].setFormantBase(0);shifts[i].setFormantFactor(std::clamp(formant,.65f,1.6f),preserve);
+                shifts[i].process(input,chunk,output[i],chunk);}}
     }
 };
-} // namespace fresh
+}

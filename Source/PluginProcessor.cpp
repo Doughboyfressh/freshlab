@@ -1,15 +1,22 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "SystemSpeech.h"
 #include <BinaryData.h>
 
 using namespace juce;
+namespace {
+int parameterVersion(const String& id){
+    static const StringArray addedIn03{"mpe","legato","bendRange","speechEngine","compAttack","compRelease","roomSize","roomDecay","roomDamping","dynamicAttack","dynamicRelease","limiterCeiling","limiterRelease","vocalFormant","vocalQuality","tuneAmount","tuneSpeed","tuneKey","tuneScale","externalSidechain","delaySync","delayDivision"};
+    return addedIn03.contains(id)?2:1;
+}
+}
 AudioProcessorValueTreeState::ParameterLayout FreshLabProcessor::layout() {
     AudioProcessorValueTreeState::ParameterLayout p;
     auto f=[&](const char* id,const char* name,float lo,float hi,float def,float skew=1.0f){
-        p.add(std::make_unique<AudioParameterFloat>(ParameterID{id,1},name,NormalisableRange<float>{lo,hi,0,skew},def));
+        p.add(std::make_unique<AudioParameterFloat>(ParameterID{id,parameterVersion(id)},name,NormalisableRange<float>{lo,hi,0,skew},def));
     };
-    auto choice=[&](const char* id,const char* name,StringArray labels,int def){p.add(std::make_unique<AudioParameterChoice>(ParameterID{id,1},name,labels,def));};
-    auto b=[&](const char* id,const char* name,bool def){p.add(std::make_unique<AudioParameterBool>(ParameterID{id,1},name,def));};
+    auto choice=[&](const char* id,const char* name,StringArray labels,int def){p.add(std::make_unique<AudioParameterChoice>(ParameterID{id,parameterVersion(id)},name,labels,def));};
+    auto b=[&](const char* id,const char* name,bool def){p.add(std::make_unique<AudioParameterBool>(ParameterID{id,parameterVersion(id)},name,def));};
     choice("mode","Engine",{"808","Synth","Adlib"},0);choice("wave","Waveform",{"Sine","Saw","Square","Triangle"},1);
     f("attack","Attack (s)",.001f,2,.005f,.35f);f("decay","Decay (s)",.03f,8,1.2f,.4f);
     f("sustain","Sustain",0,1,.65f);f("release","Release (s)",.005f,4,.15f,.4f);
@@ -49,6 +56,19 @@ AudioProcessorValueTreeState::ParameterLayout FreshLabProcessor::layout() {
         p.add(std::make_unique<AudioParameterInt>(ParameterID{prefix+"Pitch",1},"Step "+String(i+1)+" pitch",-24,24,0));
         f((prefix+"Velocity").toRawUTF8(),("Step "+String(i+1)+" velocity").toRawUTF8(),0,1,.85f);
     }
+    b("mpe","MPE lower zone",false);b("legato","Legato portamento",false);f("bendRange","Pitch bend range (st)",1,48,2);
+    choice("speechEngine","Speech engine",{"Original electronic","Installed system voice"},0);
+    f("compAttack","Compressor attack (ms)",.1f,200,5,.4f);f("compRelease","Compressor release (ms)",5,2000,80,.4f);
+    f("roomSize","Room size",.25f,1.8f,1);f("roomDecay","Room decay (s)",.2f,8,1.5f,.5f);f("roomDamping","Room damping",0,.95f,.7f);
+    f("dynamicAttack","Dynamic EQ attack (ms)",.1f,200,6,.4f);f("dynamicRelease","Dynamic EQ release (ms)",5,2000,120,.4f);
+    f("limiterCeiling","Limiter ceiling (dB)",-12,0,-.3f);f("limiterRelease","Limiter release (ms)",10,1000,80,.4f);
+    p.add(std::make_unique<AudioParameterChoice>(ParameterID{"vocalQuality",2},"Vocal quality",StringArray{"Live / creative","Studio / formants + tuning"},0,AudioParameterChoiceAttributes{}.withAutomatable(false)));
+    f("vocalFormant","Vocal formant",.65f,1.6f,1);
+    f("tuneAmount","Pitch correction amount",0,1,0);f("tuneSpeed","Pitch correction response (ms)",1,300,60,.5f);
+    choice("tuneKey","Pitch correction root",{"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"},0);
+    choice("tuneScale","Pitch correction scale",{"Chromatic","Major","Minor","Major pentatonic"},0);
+    b("externalSidechain","External compressor sidechain",false);b("delaySync","Delay follows host tempo",false);
+    choice("delayDivision","Synced delay length",{"1/32","1/16","1/8 triplet","1/8","1/8 dotted","1/4","1/4 dotted","1/2"},5);
     b("padMidi","MIDI notes 36-43 trigger pads",false);
     auto names=voiceNames();names.insert(0,"Current custom voice");const int notes[]{33,36,40,43,60,64,67,72};
     for(int i=0;i<8;++i){const String prefix="pad"+String(i);
@@ -63,7 +83,7 @@ AudioProcessorValueTreeState::ParameterLayout FreshLabProcessor::layout() {
 FreshLabProcessor::FreshLabProcessor()
  : AudioProcessor(BusesProperties()
  #if !JucePlugin_IsSynth
-    .withInput("Input",AudioChannelSet::stereo(),true)
+    .withInput("Input",AudioChannelSet::stereo(),true).withInput("Sidechain",AudioChannelSet::stereo(),false)
  #endif
     .withOutput("Output",AudioChannelSet::stereo(),true)),state(*this,nullptr,"FreshLab",layout()) {
     formats.registerBasicFormats();
@@ -78,17 +98,21 @@ FreshLabProcessor::FreshLabProcessor()
         }
         loadFactory(0);
     }
+    startTimerHz(30);
 }
 bool FreshLabProcessor::isBusesLayoutSupported(const BusesLayout& l) const {
     const auto out=l.getMainOutputChannelSet();
     if(out!=AudioChannelSet::mono()&&out!=AudioChannelSet::stereo())return false;
-    return instrument||l.getMainInputChannelSet()==out;
+    if(!instrument&&l.getMainInputChannelSet()!=out)return false;
+    if(!instrument&&l.inputBuses.size()>1){const auto side=l.inputBuses[1];if(!side.isDisabled()&&side!=AudioChannelSet::mono()&&side!=AudioChannelSet::stereo())return false;}
+    return true;
 }
-void FreshLabProcessor::prepareToPlay(double sr,int) { synth.prepare(sr);for(auto& s:padSynths)s.prepare(sr);sequenceSynth.prepare(sr);effects.prepare(sr);sequencer.reset();localBeats=0; }
+void FreshLabProcessor::prepareToPlay(double sr,int) { synth.prepare(sr);for(auto& s:padSynths)s.prepare(sr);sequenceSynth.prepare(sr);effects.prepare(sr);auto fx=fxPatch();effects.configure(fx);appliedQuality=fx.vocalQuality;pendingLatency=effects.latency();setLatencySamples(effects.latency());sequencer.reset();localBeats=0; }
 void FreshLabProcessor::stopVoices(){synth.allOff();for(auto& s:padSynths)s.allOff();sequenceSynth.allOff();sequenceGate=-1;activeStep=-1;}
 void FreshLabProcessor::reset(){stopVoices();synth.reset();effects.reset();keyboard.reset();sequencer.reset();localBeats=0;meterL=0;meterR=0;macroSeconds=0;pendingPads=0;}
 fresh::Patch FreshLabProcessor::patch() const {
     fresh::Patch p;
+    p.mpe=value("mpe")>.5f;p.legato=value("legato")>.5f;p.bendRange=value("bendRange");
     p.mode=int(value("mode"));p.wave=int(value("wave"));p.attack=value("attack");p.decay=value("decay");
     p.sustain=value("sustain");p.release=value("release");p.glide=value("glide");p.drop=value("drop");
     p.detune=value("detune");p.cutoff=value("cutoff");p.root=int(value("root"));p.samplePitch=value("samplePitch");
@@ -103,9 +127,10 @@ fresh::FxPatch FreshLabProcessor::fxPatch() const {
     GET(input);GET(output);GET(mix);GET(drive);GET(distMix);GET(highPass);GET(lowHz);GET(lowGain);
     GET(mid1Hz);GET(mid1Gain);GET(mid1Q);GET(mid2Hz);GET(mid2Gain);GET(mid2Q);GET(highHz);GET(highGain);
     GET(threshold);GET(ratio);GET(deess);GET(delayMs);GET(feedback);GET(delayMix);GET(reverb);
-    GET(doubles);GET(harmony);GET(harmonyPitch);GET(width);GET(dynamicHz);GET(dynamicQ);GET(dynamicThreshold);GET(dynamicRange);
+    GET(doubles);GET(harmony);GET(harmonyPitch);GET(width);GET(vocalFormant);GET(tuneAmount);GET(tuneSpeed);
+    GET(compAttack);GET(compRelease);GET(roomSize);GET(roomDecay);GET(roomDamping);GET(dynamicAttack);GET(dynamicRelease);GET(limiterCeiling);GET(limiterRelease);GET(dynamicHz);GET(dynamicQ);GET(dynamicThreshold);GET(dynamicRange);
     #undef GET
-    p.distType=int(value("distType"));p.bypass=value("bypass")>.5f;return p;
+    p.vocalQuality=int(value("vocalQuality"));p.tuneKey=int(value("tuneKey"));p.tuneScale=int(value("tuneScale"));p.externalSidechain=value("externalSidechain")>.5f;p.distType=int(value("distType"));p.bypass=value("bypass")>.5f;return p;
 }
 fresh::SequencePatch FreshLabProcessor::sequencePatch()const {
     fresh::SequencePatch p;p.division=2<<int(value("seqDivision"));p.length=4<<int(value("seqLength"));p.swing=value("seqSwing");
@@ -115,7 +140,7 @@ void FreshLabProcessor::setStep(int i,int action,int pitch,float velocity){if(i<
 void FreshLabProcessor::playPad(int index,const fresh::Patch& source,float velocity){
     const std::string key="pad"+std::to_string(index);auto get=[&](const char* suffix){return values.find(key+suffix)->second->load();};
     auto p=source;p.mode=int(get("Engine"));p.oneShot=p.mode==2;
-    const int voice=int(get("Voice"));const auto* audio=voice>0?&bank[size_t(voice-1)]:&sample;
+    const int voice=int(get("Voice"));const auto* audio=voice>0?&bank[size_t(voice-1)]:currentAudioSample;
     padSynths[size_t(index)].allOff();padSynths[size_t(index)].noteOn(int(get("Note")),velocity,1,p,audio);
     padNotes[size_t(index)]=int(get("Note"));padGates[size_t(index)]=p.mode==1?.5:-1;
     padMeters[size_t(index)]=1;macro=int(get("Macro"));macroSeconds=2;
@@ -125,44 +150,60 @@ void FreshLabProcessor::midi(const MidiMessage& m,const fresh::Patch& p){
         const int index=m.getNoteNumber()-36;if(m.isNoteOn())playPad(index,p,m.getFloatVelocity());
         else {auto pp=p;const auto id="pad"+std::to_string(index);pp.mode=int(values.find(id+"Engine")->second->load());pp.oneShot=pp.mode==2;padSynths[size_t(index)].noteOff(int(values.find(id+"Note")->second->load()),1,pp);}return;
     }
-    if(m.isNoteOn())synth.noteOn(m.getNoteNumber(),m.getFloatVelocity(),m.getChannel(),p,&sample);
+    if(m.isNoteOn())synth.noteOn(m.getNoteNumber(),m.getFloatVelocity(),m.getChannel(),p,currentAudioSample);
     else if(m.isNoteOff())synth.noteOff(m.getNoteNumber(),m.getChannel(),p);
     else if(m.isController()){
-        synth.controller(m.getControllerNumber(),m.getControllerValue(),m.getChannel(),p);
-        if(m.getControllerNumber()==120||m.getControllerNumber()==123)stopVoices();
+        if(p.mpe&&m.getChannel()==1&&m.getControllerNumber()==64){for(int channel=1;channel<=16;++channel)synth.controller(64,m.getControllerValue(),channel,p);}
+        else synth.controller(m.getControllerNumber(),m.getControllerValue(),m.getChannel(),p);
+        if((m.getControllerNumber()==120||m.getControllerNumber()==123)&&(!p.mpe||m.getChannel()==1))stopVoices();
     }
-    else if(m.isPitchWheel())synth.pitchBend(m.getPitchWheelValue(),m.getChannel());
+    else if(m.isPitchWheel())synth.pitchBend(m.getPitchWheelValue(),m.getChannel(),p.mpe,p.bendRange);
+    else if(m.isChannelPressure())synth.channelPressure(m.getChannelPressureValue()/127.f,m.getChannel());
+    else if(m.isAftertouch())synth.polyPressure(m.getAfterTouchValue()/127.f,m.getNoteNumber(),m.getChannel());
     else if(m.isAllSoundOff())synth.allOff(m.getChannel());
 }
-void FreshLabProcessor::processBlock(AudioBuffer<float>& buffer,MidiBuffer& messages) {
+void FreshLabProcessor::processBlock(AudioBuffer<float>& buffer,MidiBuffer& messages){processAudio(buffer,messages,false);}
+void FreshLabProcessor::processBlockBypassed(AudioBuffer<float>& buffer,MidiBuffer& messages){
+    if(instrument){buffer.clear();messages.clear();stopVoices();}processAudio(buffer,messages,true);
+}
+void FreshLabProcessor::processAudio(AudioBuffer<float>& buffer,MidiBuffer& messages,bool hostBypass) {
     ScopedNoDenormals noDenormals;
-    if(instrument)keyboard.processNextMidiBuffer(messages,0,buffer.getNumSamples(),true);
+    if(instrument&&!hostBypass)keyboard.processNextMidiBuffer(messages,0,buffer.getNumSamples(),true);
     if(resetRequested.exchange(false)){stopVoices();effects.reset();sequencer.reset();macroSeconds=0;}
     if(panicRequested.exchange(false)){stopVoices();effects.reset();messages.clear();pendingPads=0;macroSeconds=0;sequencer.reset();}
-    const auto p=patch();auto fx=fxPatch();effects.configure(fx);
-    const ScopedTryLock lock(sampleMutex);
-    if(instrument&&!lock.isLocked()){buffer.clear();stopVoices();messages.clear();return;}
+    const auto p=patch();auto fx=fxPatch();fx.bypass=fx.bypass||hostBypass;
+    struct SampleGuard {std::atomic<const fresh::Sample*>& hazard;~SampleGuard(){hazard.store(nullptr);}}sampleGuard{sampleHazard};
+    currentAudioSample=nullptr;
+    for(int attempt=0;attempt<3;++attempt){const auto* candidate=audioSample.load();sampleHazard.store(candidate);
+        if(candidate==audioSample.load()){currentAudioSample=candidate;break;}}
+    if(!currentAudioSample)sampleHazard.store(nullptr);
     const double sr=getSampleRate()>0?getSampleRate():44100;
     const bool enabled=instrument&&value("seqEnabled")>.5f,sync=value("seqSync")>.5f;
-    bool running=enabled&&!sync;double bpm=value("seqBpm"),beats=localBeats;
-    if(enabled&&sync)if(auto* head=getPlayHead())if(auto position=head->getPosition()){
-        running=position->getIsPlaying()&&position->getPpqPosition().hasValue();
+    bool hostPlaying=false;bool running=enabled&&!sync;double bpm=instrument?value("seqBpm"):120.,beats=localBeats;
+    if(auto* head=getPlayHead())if(auto position=head->getPosition()){
+        hostPlaying=position->getIsPlaying();if(enabled&&sync)running=position->getIsPlaying()&&position->getPpqPosition().hasValue();
         bpm=position->getBpm().orFallback(120.0);beats=position->getPpqPosition().orFallback(0.0);
     }
-    bpm=std::clamp(bpm,20.0,400.0);const double beatStep=bpm/(60*sr);const auto pattern=sequencePatch();
+    bpm=std::isfinite(bpm)?std::clamp(bpm,20.0,400.0):120.;if(!std::isfinite(beats)){beats=0;running=false;}
+    if(value("delaySync")>.5f){const double beatsPerEcho[]{.125,.25,1./3,.5,.75,1,1.5,2};fx.delayMs=float(std::clamp(60000/bpm*beatsPerEcho[std::clamp(int(value("delayDivision")),0,7)],1.,7990.));}
+    if(hostPlaying)fx.vocalQuality=appliedQuality.load();else appliedQuality=fx.vocalQuality;
+    effects.configure(fx);pendingLatency=effects.latency();delayTimeMs=fx.delayMs;
+    AudioBuffer<float> sidechain;
+    if(!instrument&&getBusCount(true)>1&&getBus(true,1)->isEnabled())sidechain=getBusBuffer(buffer,true,1);
+    const double beatStep=bpm/(60*sr);const auto pattern=sequencePatch();
     if(!running){sequencer.reset();sequenceSynth.allOff();sequenceGate=-1;activeStep=-1;}
     std::array<fresh::Patch,8> pads;std::array<const fresh::Sample*,8> audio{};
     for(int index=0;index<8;++index){const std::string key="pad"+std::to_string(index);pads[size_t(index)]=p;
         pads[size_t(index)].mode=int(values.find(key+"Engine")->second->load());pads[size_t(index)].oneShot=pads[size_t(index)].mode==2;
-        const int voice=int(values.find(key+"Voice")->second->load());audio[size_t(index)]=voice>0?&bank[size_t(voice-1)]:&sample;
+        const int voice=int(values.find(key+"Voice")->second->load());audio[size_t(index)]=voice>0?&bank[size_t(voice-1)]:currentAudioSample;
     }
     const unsigned queued=pendingPads.exchange(0);if(instrument)for(int i=0;i<8;++i)if(queued&(1u<<i))playPad(i,p);
     auto event=messages.cbegin();const auto end=messages.cend();float maxL=0,maxR=0;
     for(int i=0;i<buffer.getNumSamples();++i){
         if(instrument)while(event!=end&&(*event).samplePosition<=i){midi((*event).getMessage(),p);++event;}
         float l=0,r=0;
-        if(instrument){
-            synth.render(l,r,p,&sample);
+        if(instrument&&!hostBypass){
+            synth.render(l,r,p,currentAudioSample);
             for(int index=0;index<8;++index)if(padSynths[size_t(index)].isActive()){
                 if(padGates[size_t(index)]>0){padGates[size_t(index)]-=1/sr;if(padGates[size_t(index)]<=0)padSynths[size_t(index)].noteOff(padNotes[size_t(index)],1,pads[size_t(index)]);}
                 float a,b;padSynths[size_t(index)].render(a,b,pads[size_t(index)],audio[size_t(index)]);l+=a;r+=b;
@@ -170,15 +211,15 @@ void FreshLabProcessor::processBlock(AudioBuffer<float>& buffer,MidiBuffer& mess
             if(running){
                 const auto e=sequencer.tick(beats,pattern);
                 if(e.trigger){sequenceVoice=p;sequenceVoice.mode=2;sequenceVoice.reverse=p.reverse!=e.reverse;sequenceVoice.oneShot=false;sequenceVoice.attack=.003f;sequenceVoice.release=.012f;
-                    sequenceNote=std::clamp(p.root+e.pitch,0,127);sequenceSynth.allOff();sequenceSynth.noteOn(sequenceNote,e.velocity,1,sequenceVoice,&sample);
+                    sequenceNote=std::clamp(p.root+e.pitch,0,127);sequenceSynth.allOff();sequenceSynth.noteOn(sequenceNote,e.velocity,1,sequenceVoice,currentAudioSample);
                     sequenceGate=beats+e.gateBeats;activeStep=e.step;
                     if(e.throwDelay){macro=2;macroSeconds=60/bpm;}
                 }
                 if(sequenceGate>=0&&beats>=sequenceGate){sequenceSynth.noteOff(sequenceNote,1,sequenceVoice);sequenceGate=-1;}
-                float a,b;sequenceSynth.render(a,b,sequenceVoice,&sample);l+=a;r+=b;
+                float a,b;sequenceSynth.render(a,b,sequenceVoice,currentAudioSample);l+=a;r+=b;
             }
         }
-        else {l=buffer.getSample(0,i);r=buffer.getNumChannels()>1?buffer.getSample(1,i):l;}
+        else if(!instrument){l=buffer.getSample(0,i);r=getMainBusNumOutputChannels()>1?buffer.getSample(1,i):l;}
         auto effective=fx;
         if(macroSeconds>0){const float fade=float(std::min(1.0,macroSeconds/.05));
             if(macro==1){effective.drive=std::max(fx.drive,18*fade);effective.distMix=std::max(fx.distMix,.6f*fade);}
@@ -186,8 +227,9 @@ void FreshLabProcessor::processBlock(AudioBuffer<float>& buffer,MidiBuffer& mess
             if(macro==3)effective.reverb=std::max(fx.reverb,.65f*fade);
             macroSeconds-=1/sr;
         }
-        effects.process(l,r,effective);
-        buffer.setSample(0,i,l);if(buffer.getNumChannels()>1)buffer.setSample(1,i,r);
+        float detector=-1;if(sidechain.getNumChannels()>0){detector=0;for(int c=0;c<sidechain.getNumChannels();++c)detector=std::max(detector,std::abs(sidechain.getSample(c,i)));}
+        effects.process(l,r,effective,detector);
+        buffer.setSample(0,i,l);if(getMainBusNumOutputChannels()>1)buffer.setSample(1,i,r);
         maxL=std::max(maxL,std::abs(l));maxR=std::max(maxR,std::abs(r));
         if(running)beats+=beatStep;
     }
@@ -220,11 +262,30 @@ fresh::Sample FreshLabProcessor::readAudio(std::unique_ptr<AudioFormatReader> re
     for(auto& v:replacement.right)v=std::clamp(fresh::finite(v),-1.0f,1.0f);
     return replacement;
 }
-void FreshLabProcessor::installSample(fresh::Sample replacement,const String& title){const ScopedLock lock(sampleMutex);sample=std::move(replacement);sampleTitle=title.substring(0,64);}
+void FreshLabProcessor::publishAudioSample(){
+    auto next=std::make_unique<const fresh::Sample>(sample);
+    retiredSamples.reserve(retiredSamples.size()+1);
+    if(audioSampleOwner)retiredSamples.push_back(std::move(audioSampleOwner));
+    audioSampleOwner=std::move(next);audioSample.store(audioSampleOwner.get());
+    const auto* protectedSample=sampleHazard.load();
+    retiredSamples.erase(std::remove_if(retiredSamples.begin(),retiredSamples.end(),[protectedSample](const auto& p){return p.get()!=protectedSample;}),retiredSamples.end());
+}
+void FreshLabProcessor::installSample(fresh::Sample replacement,const String& title){const ScopedLock lock(sampleMutex);sample=std::move(replacement);sampleTitle=title.substring(0,64);publishAudioSample();}
 String FreshLabProcessor::decode(std::unique_ptr<AudioFormatReader> reader,const String& title){try{installSample(readAudio(std::move(reader)),title);return {};}catch(const std::exception& e){return e.what();}}
 String FreshLabProcessor::generateVoice(const String& text,const String& name){
     fresh::VoiceDesign d;d.character=int(value("voiceStyle"));d.pitch=value("voicePitch");d.formant=value("voiceFormant");d.breath=value("voiceBreath");d.grit=value("voiceGrit");d.robot=value("voiceRobot");d.speed=value("voiceSpeed");d.width=value("voiceWidth");
-    try {auto generated=fresh::Speech::render(text.toStdString(),d);{const ScopedLock lock(sampleMutex);sample=std::move(generated);sampleTitle=name.isNotEmpty()?name.substring(0,64):text.substring(0,48);voiceText=text;}
+    try {fresh::Sample generated;
+        if(value("speechEngine")>.5f){
+            #if JUCE_MAC
+            const char* extension=".aiff";
+           #else
+            const char* extension=".wav";
+           #endif
+            const auto rendered=File::getSpecialLocation(File::tempDirectory).getNonexistentChildFile("freshlab-installed-voice",extension,false);
+            struct Cleanup {File file;~Cleanup(){file.deleteFile();}}cleanup{rendered};
+            const auto error=fresh::renderSystemSpeech(text,d.speed,rendered);if(error.isNotEmpty())return error;
+            generated=readAudio(std::unique_ptr<AudioFormatReader>(formats.createReaderFor(rendered)));
+        }else generated=fresh::Speech::render(text.toStdString(),d);{const ScopedLock lock(sampleMutex);sample=std::move(generated);sampleTitle=name.isNotEmpty()?name.substring(0,64):text.substring(0,48);voiceText=text;publishAudioSample();}
         setValue("mode",2);setValue("root",60);setValue("samplePitch",0);setValue("sampleStart",0);setValue("reverse",0);return {};
     }catch(const std::exception& e){return e.what();}
 }
@@ -251,7 +312,7 @@ String FreshLabProcessor::sampleName() const {const ScopedLock lock(sampleMutex)
 void FreshLabProcessor::getStateInformation(MemoryBlock& dest){
     auto copy=state.copyState();
     const ScopedLock lock(sampleMutex);
-    copy.addChild(brand.createCopy(),-1,nullptr);copy.setProperty("voiceText",voiceText,nullptr);copy.setProperty("schema",2,nullptr);
+    copy.addChild(brand.createCopy(),-1,nullptr);copy.setProperty("voiceText",voiceText,nullptr);copy.setProperty("schema",3,nullptr);copy.setProperty("editorWidth",editorWidth.load(),nullptr);
     if(instrument){
         if(sample.valid()){
             // Store interleaved float samples explicitly little-endian for portable projects.
@@ -265,6 +326,7 @@ void FreshLabProcessor::getStateInformation(MemoryBlock& dest){
 void FreshLabProcessor::setStateInformation(const void* data,int size){
     if(size<=0||size>24*1024*1024)return;
     auto copy=ValueTree::readFromData(data,static_cast<size_t>(size));if(!copy.isValid()||!copy.hasType("FreshLab"))return;
+    editorWidth=std::clamp(int(copy.getProperty("editorWidth",editorWidth.load())),868,1860);editorHeight=int(std::round(editorWidth.load()*940.0/1240));copy.removeProperty("editorWidth",nullptr);
     if(auto appearance=copy.getChildWithName("Branding");appearance.isValid()){setBranding(appearance);copy.removeChild(appearance,nullptr);}
     {const ScopedLock lock(sampleMutex);voiceText=copy.getProperty("voiceText",voiceText).toString().substring(0,100);}
     if(instrument){
@@ -273,7 +335,7 @@ void FreshLabProcessor::setStateInformation(const void* data,int size){
             if(sr>=8000&&sr<=192000&&count>=2&&count<=sr*12&&blob->getSize()==12+static_cast<size_t>(count)*8){
                 fresh::Sample replacement;replacement.rate=sr;replacement.left.resize(size_t(count));replacement.right.resize(size_t(count));
                 for(int i=0;i<count;++i){replacement.left[size_t(i)]=std::clamp(fresh::finite(stream.readFloat()),-1.0f,1.0f);replacement.right[size_t(i)]=std::clamp(fresh::finite(stream.readFloat()),-1.0f,1.0f);}
-                const ScopedLock lock(sampleMutex);sample=std::move(replacement);sampleTitle=copy["voiceName"].toString();
+                const ScopedLock lock(sampleMutex);sample=std::move(replacement);sampleTitle=copy["voiceName"].toString();publishAudioSample();
             }
         }
     }
@@ -295,9 +357,9 @@ String FreshLabProcessor::loadSound(const File& file){
     auto incoming=entry.getChild(0);const int scope=int(entry["scope"]);
     if(scope<0||scope>4)return "Unknown sound category.";
     if(scope==0){MemoryOutputStream out;incoming.writeToStream(out);setStateInformation(out.getData(),int(out.getDataSize()));return {};}
-    const StringArray voices{"root","samplePitch","sampleStart","reverse","oneShot","voiceStyle","voicePitch","voiceFormant","voiceBreath","voiceGrit","voiceRobot","voiceSpeed","voiceWidth"};
-    const StringArray instruments{"mode","wave","attack","decay","sustain","release","glide","drop","detune","cutoff","bassSub","bassPunch","bassClick","bassBuzz","bassDrive","curveTime","curveEnabled"};
-    const StringArray eq{"highPass","lowHz","lowGain","mid1Hz","mid1Gain","mid1Q","mid2Hz","mid2Gain","mid2Q","highHz","highGain","dynamicHz","dynamicQ","dynamicThreshold","dynamicRange"};
+    const StringArray voices{"root","samplePitch","sampleStart","reverse","oneShot","voiceStyle","voicePitch","voiceFormant","voiceBreath","voiceGrit","voiceRobot","voiceSpeed","voiceWidth","speechEngine"};
+    const StringArray instruments{"mode","wave","attack","decay","sustain","release","glide","drop","detune","cutoff","bassSub","bassPunch","bassClick","bassBuzz","bassDrive","curveTime","curveEnabled","mpe","legato","bendRange"};
+    const StringArray eq{"highPass","lowHz","lowGain","mid1Hz","mid1Gain","mid1Q","mid2Hz","mid2Gain","mid2Q","highHz","highGain","dynamicHz","dynamicQ","dynamicThreshold","dynamicRange","dynamicAttack","dynamicRelease"};
     for(auto child:incoming){const String id=child["id"].toString();if(id.isEmpty())continue;bool selected=false;
         if(scope==1)selected=voices.contains(id);if(scope==2)selected=instruments.contains(id)||id.startsWith("curve");
         if(scope==3)selected=eq.contains(id);if(scope==4)selected=!voices.contains(id)&&!instruments.contains(id)&&!id.startsWith("curve")&&!id.startsWith("step")&&!id.startsWith("seq")&&!id.startsWith("pad");

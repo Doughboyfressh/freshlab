@@ -23,7 +23,7 @@ int main(int argc,char** argv){try{
         require(energy(s,p,int(rate*.05))>.0001,"poly synth audible");
         s.noteOff(60,1,p);s.noteOff(67,1,p);require(energy(s,p,int(rate*3))<.004,"release decays");
         require(energy(s,p,100)==0,"release becomes silence");
-        Effects fx;fx.prepare(rate);FxPatch fp;fp.bypass=true;float l=.12f,r=-.45f;fx.process(l,r,fp);require(l==.12f&&r==-.45f,"bypass exact");
+        Effects fx;fx.prepare(rate);FxPatch fp;fp.bypass=true;float l=.12f,r=-.45f;for(int i=0;i<=fx.latency();++i){l=.12f;r=-.45f;fx.process(l,r,fp);}require(l==.12f&&r==-.45f,"latency-aligned bypass exact");
         fp.bypass=false;fp.drive=30;fp.distMix=1;fp.feedback=.85f;fp.delayMix=1;fp.reverb=1;
         fp.lowGain=18;fp.mid1Gain=18;fp.mid1Q=8;fp.mid2Gain=18;fp.highGain=18;fp.output=6;
         fx.configure(fp);

@@ -28,7 +28,7 @@ int main(){try{
     }
     for(double rate:{22050,44100,96000}){
         VocalLayers v;v.prepare(rate);std::vector<float> wet;
-        for(int i=0;i<int(rate);++i){float l=float(std::sin(2*pi*440*i/rate))*.2f,r=l,original=l;v.process(l,r,0,1,7,1);if(i>rate*.4)wet.push_back(l-original);check(std::isfinite(l)&&std::isfinite(r),"harmonizer stable");}
+        for(int i=0;i<int(rate);++i){float l=float(std::sin(2*pi*440*i/rate))*.2f,r=l,original=l;v.process(l,r,0,1,7,1,1,false);if(i>rate*.4)wet.push_back(l-original);check(std::isfinite(l)&&std::isfinite(r),"harmonizer stable");}
         check(toneAmplitude(wet,440*std::exp2(7.0/12),rate)>.01,"harmony contains requested interval");
         Effects dry,dynamic;dry.prepare(rate);dynamic.prepare(rate);FxPatch plain;plain.output=0;plain.ratio=1;
         FxPatch cut=plain;cut.dynamicHz=3200;cut.dynamicQ=2;cut.dynamicRange=12;cut.dynamicThreshold=-30;dry.configure(plain);dynamic.configure(cut);double e0=0,e1=0;

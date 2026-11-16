@@ -26,7 +26,7 @@ void FreshLook::drawRotarySlider(Graphics& g,int x,int y,int w,int h,float pos,f
     g.setColour(ink);const float inside=knobStyle==1?0:radius-21;g.drawLine(cx+std::sin(angle)*inside,cy-std::cos(angle)*inside,cx+std::sin(angle)*(radius-12),cy-std::cos(angle)*(radius-12),2);
 }
 FreshLabEditor::Knob::Knob(FreshLabProcessor& p,const String& id,const String& text){
-    title.setText(text,dontSendNotification);title.setJustificationType(Justification::centred);title.setFont(Font{FontOptions{12.5f}});addAndMakeVisible(title);
+    setComponentID(id);title.setText(text,dontSendNotification);title.setJustificationType(Justification::centred);title.setFont(Font{FontOptions{12.5f}});addAndMakeVisible(title);
     slider.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);slider.setTextBoxStyle(Slider::TextBoxBelow,false,90,24);slider.setName(text);slider.setTooltip(p.state.getParameter(id)->getName(100));
     addAndMakeVisible(slider);attachment=std::make_unique<SliderAttachment>(p.state,id,slider);
     slider.textFromValueFunction=[id](double v){int n=2;if(id=="root"||id=="harmonyPitch"||id=="cutoff"||id.endsWith("Hz")||id=="highPass"||id=="delayMs"||id=="seqBpm")n=0;
@@ -36,7 +36,7 @@ FreshLabEditor::Knob::Knob(FreshLabProcessor& p,const String& id,const String& t
 }
 void FreshLabEditor::Knob::resized(){auto r=getLocalBounds();title.setBounds(r.removeFromTop(23));slider.setBounds(r);}
 FreshLabEditor::Menu::Menu(FreshLabProcessor& p,const String& id,const String& text,StringArray labels){
-    title.setText(text,dontSendNotification);title.setFont(Font{FontOptions{12.0f}});addAndMakeVisible(title);combo.addItemList(labels,1);combo.setName(text);addAndMakeVisible(combo);attachment=std::make_unique<ComboAttachment>(p.state,id,combo);
+    setComponentID(id);title.setText(text,dontSendNotification);title.setFont(Font{FontOptions{12.0f}});addAndMakeVisible(title);combo.addItemList(labels,1);combo.setName(text);addAndMakeVisible(combo);attachment=std::make_unique<ComboAttachment>(p.state,id,combo);
 }
 void FreshLabEditor::Menu::resized(){auto r=getLocalBounds();title.setBounds(r.removeFromTop(20));combo.setBounds(r.reduced(0,3));}
 FreshLabEditor::StepControl::StepControl(FreshLabProcessor& p,int i):processor(p),index(i){
@@ -76,6 +76,7 @@ void FreshLabEditor::fileDialog(const String& title,const String& extensions,boo
     chooser->launchAsync((save?FileBrowserComponent::saveMode|FileBrowserComponent::warnAboutOverwriting:FileBrowserComponent::openMode)|FileBrowserComponent::canSelectFiles,[safe,fn=std::move(fn)](const FileChooser& c){if(safe&&c.getResult()!=File{})fn(c.getResult());});
 }
 FreshLabEditor::FreshLabEditor(FreshLabProcessor& p):AudioProcessorEditor(p),processor(p),curve(p),keyboard(p.keyboard,MidiKeyboardComponent::horizontalKeyboard){
+    const int initialWidth=p.editorWidth.load(),initialHeight=p.editorHeight.load();
     setLookAndFeel(&look);
     for(int i=0;i<9;++i){auto& tab=tabs[size_t(i)];tab.setButtonText(pageNames[i]);tab.onClick=[this,i]{showPage(i);};addAndMakeVisible(tab);}
     if(FreshLabProcessor::instrument)presets.addItemList({"Init / Clean","808 / Heavy","808 / Short knock","Synth / Night pad","Synth / Square bass","Adlib / Sub yeah","Adlib / Circuit echo","Vocal / Clear","Vocal / Telephone","FX / Wide echo"},1);
@@ -85,14 +86,17 @@ FreshLabEditor::FreshLabEditor(FreshLabProcessor& p):AudioProcessorEditor(p),pro
     auto text=[this](int page,TextEditor& e,const String& placeholder,const String& value,int limit){e.setTextToShowWhenEmpty(placeholder,muted);e.setInputRestrictions(limit);e.setText(value);e.setName(placeholder);addPage(page,e);};
     if(FreshLabProcessor::instrument){
         addMenu(0,"mode","SOUND ENGINE",{"808 bass","Poly synth","Adlib sampler"});addMenu(0,"wave","SYNTH WAVE",{"Sine","Saw","Square","Triangle"});
-        addKnob(0,"attack","Attack / sec");addKnob(0,"decay","Decay / sec");addKnob(0,"sustain","Sustain");addKnob(0,"release","Release / sec");addKnob(0,"glide","808 glide / sec");addKnob(0,"drop","808 drop / st");addKnob(0,"detune","Synth detune / ct");addKnob(0,"cutoff","Synth filter / Hz");
+        addKnob(0,"attack","Attack / sec");addKnob(0,"decay","Decay / sec");addKnob(0,"sustain","Sustain");addKnob(0,"release","Release / sec");addKnob(0,"glide","808 glide / sec");addKnob(0,"drop","808 drop / st");addKnob(0,"detune","Synth detune / ct");addKnob(0,"cutoff","Synth filter / Hz");addKnob(0,"bendRange","Bend range / st");bindToggle(0,"mpe",mpe);bindToggle(0,"legato",legato);
         text(1,voiceName,"Voice name","Custom Fresh voice",64);text(1,phraseText,"Type an adlib in English",p.phrase(),100);
         voices.addItemList(FreshLabProcessor::voiceNames(),1);voices.setTextWhenNothingSelected("Choose an original voice");voices.setName("Original voice bank");voices.onChange=[this]{status=processor.loadFactory(voices.getSelectedId()-1);if(status.isEmpty())status="Original voice loaded";processor.setValue("mode",2);};addPage(1,voices);
-        generate.onClick=[this]{status=processor.generateVoice(phraseText.getText(),voiceName.getText());if(status.isEmpty()){status="New voice generated / original CC0 audio";voices.setSelectedId(0,dontSendNotification);}};addPage(1,generate);
+        generate.onClick=[this]{generate.setEnabled(false);status="Generating voice...";Component::SafePointer<FreshLabEditor> safe(this);
+            processor.generateVoiceAsync(phraseText.getText(),voiceName.getText(),[safe](String error){if(!safe)return;
+                safe->generate.setEnabled(true);safe->status=error.isEmpty()?"Voice generated; ready to play or export":error;
+                if(error.isEmpty())safe->voices.setSelectedId(0,dontSendNotification);safe->repaint();});};addPage(1,generate);
         importVoice.onClick=[this]{fileDialog("Load an adlib up to 12 seconds","*.wav;*.aif;*.aiff;*.flac",false,[this](File f){status=processor.loadSample(f);if(status.isEmpty()){status="Recording loaded";processor.setValue("mode",2);voices.setSelectedId(0,dontSendNotification);}});};addPage(1,importVoice);
         exportVoice.onClick=[this]{fileDialog("Export the current voice","*.wav",true,[this](File f){status=processor.exportVoice(f.withFileExtension("wav"));if(status.isEmpty())status="Voice WAV exported";});};addPage(1,exportVoice);
         audition.onClick=[this]{processor.setValue("mode",2);processor.keyboard.noteOn(1,60,.9f);previewTicks=24;};addPage(1,audition);
-        addMenu(1,"voiceStyle","SYNTHETIC CHARACTER",{"Sub","Spark","Haze","Circuit"});bindToggle(1,"reverse",reverse);bindToggle(1,"oneShot",oneShot);
+        addMenu(1,"voiceStyle","ORIGINAL CHARACTER",{"Sub","Spark","Haze","Circuit"});addMenu(1,"speechEngine","SPEECH ENGINE",{"Original electronic","Installed system voice"});bindToggle(1,"reverse",reverse);bindToggle(1,"oneShot",oneShot);
         addKnob(1,"voicePitch","Design pitch / st");addKnob(1,"voiceFormant","Formant size");addKnob(1,"voiceBreath","Breath");addKnob(1,"voiceGrit","Grit");addKnob(1,"voiceRobot","Robot texture");addKnob(1,"voiceSpeed","Speech speed");addKnob(1,"voiceWidth","Stereo spread");addKnob(1,"root","Root / MIDI note");addKnob(1,"samplePitch","Playback pitch / st");addKnob(1,"sampleStart","Playback start");
         addKnob(2,"bassSub","Sub layer");addKnob(2,"bassPunch","Punch layer");addKnob(2,"bassClick","Click layer");addKnob(2,"bassBuzz","Buzz layer");addKnob(2,"bassDrive","808 saturation / dB");addKnob(2,"curveTime","Pitch curve / sec");bindToggle(2,"curveEnabled",curveEnabled);addPage(2,curve);
         bindToggle(3,"seqEnabled",seqEnabled);bindToggle(3,"seqSync",seqSync);addKnob(3,"seqBpm","Internal tempo / BPM");addKnob(3,"seqSwing","Swing");
@@ -105,7 +109,15 @@ FreshLabEditor::FreshLabEditor(FreshLabProcessor& p):AudioProcessorEditor(p),pro
     }
     addMenu(4,"distType","DISTORTION",{"Soft clip","Hard clip","Foldback"});bindToggle(4,"bypass",bypass);
     addKnob(4,"input","Input / dB");addKnob(4,"output","Output / dB");addKnob(4,"mix","Dry / wet");addKnob(4,"drive","Drive / dB");addKnob(4,"distMix","Distortion mix");addKnob(4,"threshold","Comp threshold / dB");addKnob(4,"ratio","Comp ratio");addKnob(4,"deess","De esser");addKnob(4,"delayMs","Delay / ms");addKnob(4,"feedback","Feedback");addKnob(4,"delayMix","Delay send");addKnob(4,"reverb","Room send");addKnob(4,"doubles","Doubler level");addKnob(4,"harmony","Harmony level");addKnob(4,"harmonyPitch","Harmony / st");addKnob(4,"width","Stereo width");
-    addKnob(5,"highPass","High pass / Hz");addKnob(5,"lowHz","Low shelf / Hz");addKnob(5,"lowGain","Low shelf / dB");addKnob(5,"mid1Hz","Low mid / Hz");addKnob(5,"mid1Gain","Low mid / dB");addKnob(5,"mid1Q","Low mid / Q");addKnob(5,"mid2Hz","High mid / Hz");addKnob(5,"mid2Gain","High mid / dB");addKnob(5,"mid2Q","High mid / Q");addKnob(5,"highHz","High shelf / Hz");addKnob(5,"highGain","High shelf / dB");addKnob(5,"dynamicHz","Dynamic center / Hz");addKnob(5,"dynamicQ","Dynamic bandwidth / Q");addKnob(5,"dynamicThreshold","Dynamic threshold / dB");addKnob(5,"dynamicRange","Maximum cut / dB");
+    addKnob(4,"compAttack","Comp attack / ms");addKnob(4,"compRelease","Comp release / ms");
+    addKnob(4,"roomSize","Room size");addKnob(4,"roomDecay","Room decay / sec");addKnob(4,"roomDamping","Room damping");
+    addKnob(4,"limiterCeiling","Limiter ceiling / dB");addKnob(4,"limiterRelease","Limiter release / ms");addKnob(4,"vocalFormant","Vocal formant");addKnob(4,"tuneAmount","Pitch correction");addKnob(4,"tuneSpeed","Tune response / ms");
+    addMenu(4,"vocalQuality","VOCAL QUALITY",{"Live","Studio"});
+    addMenu(4,"tuneKey","TUNE ROOT",{"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"});
+    addMenu(4,"tuneScale","TUNE SCALE",{"Chromatic","Major","Minor","Major pentatonic"});
+    addMenu(4,"delayDivision","DELAY BEAT",{"1/32","1/16","1/8 triplet","1/8","1/8 dotted","1/4","1/4 dotted","1/2"});
+    bindToggle(4,"delaySync",delaySync);bindToggle(4,"externalSidechain",externalSidechain);externalSidechain.setEnabled(!FreshLabProcessor::instrument);
+    addKnob(5,"highPass","High pass / Hz");addKnob(5,"lowHz","Low shelf / Hz");addKnob(5,"lowGain","Low shelf / dB");addKnob(5,"mid1Hz","Low mid / Hz");addKnob(5,"mid1Gain","Low mid / dB");addKnob(5,"mid1Q","Low mid / Q");addKnob(5,"mid2Hz","High mid / Hz");addKnob(5,"mid2Gain","High mid / dB");addKnob(5,"mid2Q","High mid / Q");addKnob(5,"highHz","High shelf / Hz");addKnob(5,"highGain","High shelf / dB");addKnob(5,"dynamicHz","Dynamic center / Hz");addKnob(5,"dynamicQ","Dynamic bandwidth / Q");addKnob(5,"dynamicThreshold","Dynamic threshold / dB");addKnob(5,"dynamicRange","Maximum cut / dB");addKnob(5,"dynamicAttack","Dynamic attack / ms");addKnob(5,"dynamicRelease","Dynamic release / ms");
     text(7,libraryName,"Name your saved sound","Fresh sound",60);if(FreshLabProcessor::instrument)libraryScope.addItemList({"Complete sound","Voice","Instrument","EQ","Effects chain"},1);else {libraryScope.addItem("Complete sound",1);libraryScope.addItem("EQ",4);libraryScope.addItem("Effects chain",5);}libraryScope.setSelectedId(1);addPage(7,libraryScope);
     libraryEntries.setTextWhenNothingSelected("No saved sounds yet");addPage(7,libraryEntries);
     saveSound.onClick=[this]{const int scope=libraryScope.getSelectedId()-1;const StringArray categories{"Complete","Voices","Instruments","EQ","Effects"};const String name=File::createLegalFileName(libraryName.getText().trim());if(name.isEmpty()){status="Name this sound before saving.";return;}
@@ -118,7 +130,7 @@ FreshLabEditor::FreshLabEditor(FreshLabProcessor& p):AudioProcessorEditor(p),pro
     applyBrand.onClick=[this]{const auto hex=accentText.getText().retainCharacters("0123456789abcdefABCDEF");if(hex.length()!=6){status="Use six hexadecimal digits for the accent colour.";return;}auto b=processor.branding();b.setProperty("title",brandTitle.getText(),nullptr);b.setProperty("tagline",tagline.getText(),nullptr);b.setProperty("accent",hex,nullptr);b.setProperty("theme",theme.getSelectedId()-1,nullptr);b.setProperty("knobStyle",knobStyle.getSelectedId()-1,nullptr);b.setProperty("animate",animation.getToggleState(),nullptr);processor.setBranding(b);applyAppearance();status="Appearance saved with this project";};addPage(8,applyBrand);
     importLogo.onClick=[this]{fileDialog("Choose a PNG or JPEG logo","*.png;*.jpg;*.jpeg",false,[this](File f){status=processor.importLogo(f);if(status.isEmpty()){applyAppearance();status="Custom logo loaded";}});};addPage(8,importLogo);
     clearLogo.onClick=[this]{auto b=processor.branding();b.removeProperty("logo",nullptr);processor.setBranding(b);applyAppearance();};addPage(8,clearLogo);
-    setSize(1240,940);applyAppearance();showPage(FreshLabProcessor::instrument?0:4);startTimerHz(30);
+    setResizable(true,true);setResizeLimits(868,658,1860,1410);getConstrainer()->setFixedAspectRatio(1240.0/940);setSize(initialWidth,initialHeight);applyAppearance();showPage(FreshLabProcessor::instrument?0:4);timerCallback();startTimerHz(30);
 }
 FreshLabEditor::~FreshLabEditor(){stopTimer();setLookAndFeel(nullptr);}
 void FreshLabEditor::refreshSounds(){soundFiles.clear();auto dir=FreshLabProcessor::soundDirectory();dir.findChildFiles(soundFiles,File::findFiles,true,"*.freshlab");soundFiles.sort();libraryEntries.clear(dontSendNotification);for(int i=0;i<soundFiles.size();++i)libraryEntries.addItem(soundFiles[i].getParentDirectory().getFileName()+" / "+soundFiles[i].getFileNameWithoutExtension(),i+1);}
@@ -132,21 +144,31 @@ void FreshLabEditor::applyAppearance(){
 void FreshLabEditor::showPage(int p){page=p;if(!FreshLabProcessor::instrument&&(p<4||p==6))page=4;
     for(auto pair:pages)pair.second->setVisible(pair.first==page);for(int i=0;i<9;++i){tabs[size_t(i)].setToggleState(i==page,dontSendNotification);tabs[size_t(i)].setEnabled(FreshLabProcessor::instrument||(i>=4&&i!=6));}resized();repaint();}
 void FreshLabEditor::resized(){
+    if(getWidth()>=868&&getHeight()>=658){processor.editorWidth=getWidth();processor.editorHeight=getHeight();}
     presets.setBounds(820,26,250,35);panic.setBounds(1085,26,125,35);for(int i=0;i<9;++i)tabs[size_t(i)].setBounds(24,122+i*66,146,52);keyboard.setBounds(190,840,1020,70);
-    int n=0;for(size_t i=0;i<knobs.size();++i)if(knobPages[i]==page){const int columns=page==0?4:(page==1||page==5?5:6);const int top=page==0?240:(page==1?330:(page==2?160:(page==5?140:230)));const int width=948/columns;knobs[i]->setBounds(216+(n%columns)*width,top+(n/columns)*145,width-10,136);++n;}
-    int m=0;for(size_t i=0;i<menus.size();++i)if(menuPages[i]==page){int x=216+m*300,y=148,w=280;if(page==1){y=260;w=210;}if(page==3){x=610+m*270;y=222;w=250;}menus[i]->setBounds(x,y,w,61);++m;}
+    int n=0;for(size_t i=0;i<knobs.size();++i)if(knobPages[i]==page){const int columns=page==0||page==1?5:(page==4?7:6);const int top=page==0?240:(page==1?330:(page==2?160:(page==5?130:(page==4?244:230))));const int width=948/columns;knobs[i]->setBounds(216+(n%columns)*width,top+(n/columns)*(page==4||page==5?110:145),width-10,page==4||page==5?106:136);++n;}
+    int m=0;for(size_t i=0;i<menus.size();++i)if(menuPages[i]==page){int x=216+m*300,y=148,w=280;if(page==1){y=260;w=240;}if(page==4){x=216+m*190;w=180;}if(page==3){x=610+m*270;y=222;w=250;}menus[i]->setBounds(x,y,w,61);++m;}
     voiceName.setBounds(216,153,235,36);phraseText.setBounds(466,153,544,36);generate.setBounds(1024,153,162,36);
-    voices.setBounds(216,211,310,36);importVoice.setBounds(540,211,158,36);exportVoice.setBounds(712,211,158,36);audition.setBounds(884,211,158,36);reverse.setBounds(460,280,140,30);oneShot.setBounds(620,280,140,30);
+    voices.setBounds(216,211,310,36);importVoice.setBounds(540,211,158,36);exportVoice.setBounds(712,211,158,36);audition.setBounds(884,211,158,36);reverse.setBounds(830,280,140,30);oneShot.setBounds(1000,280,140,30);mpe.setBounds(216,710,200,30);legato.setBounds(450,710,250,30);
     curveEnabled.setBounds(216,341,300,35);curve.setBounds(216,398,948,276);
     seqEnabled.setBounds(216,153,200,35);seqSync.setBounds(438,153,250,35);clearSteps.setBounds(828,153,162,35);fillSteps.setBounds(1005,153,180,35);
     if(page==3){int k=0;for(size_t i=0;i<knobs.size();++i)if(knobPages[i]==3)knobs[i]->setBounds(216+k++*178,209,160,126);}
     for(int i=0;i<16;++i)if(steps[size_t(i)])steps[size_t(i)]->setBounds(214+(i%8)*121,365+(i/8)*153,108,130);
-    bypass.setBounds(530,165,250,35);padMidi.setBounds(216,153,450,35);for(int i=0;i<8;++i)if(pads[size_t(i)])pads[size_t(i)]->setBounds(212+(i%4)*246,224+(i/4)*225,226,195);
+    bypass.setBounds(1000,211,180,25);delaySync.setBounds(790,211,200,25);externalSidechain.setBounds(216,211,390,25);padMidi.setBounds(216,153,450,35);for(int i=0;i<8;++i)if(pads[size_t(i)])pads[size_t(i)]->setBounds(212+(i%4)*246,224+(i/4)*225,226,195);
     libraryName.setBounds(216,180,340,38);libraryScope.setBounds(574,180,255,38);saveSound.setBounds(847,180,300,38);libraryEntries.setBounds(216,280,694,40);loadSound.setBounds(930,280,217,40);refreshLibrary.setBounds(216,345,180,36);importSound.setBounds(415,345,230,36);
     brandTitle.setBounds(216,180,450,38);tagline.setBounds(216,260,670,38);accentText.setBounds(216,340,190,38);theme.setBounds(430,340,220,38);knobStyle.setBounds(674,340,220,38);animation.setBounds(216,405,250,35);applyBrand.setBounds(216,470,250,40);importLogo.setBounds(486,470,200,40);clearLogo.setBounds(706,470,190,40);
+    const auto transform=AffineTransform::scale(getWidth()/1240.0f,getHeight()/940.0f);
+    for(auto* child:getChildren())if(dynamic_cast<ResizableCornerComponent*>(child)==nullptr)child->setTransform(transform);
 }
 void FreshLabEditor::timerCallback(){
     if(brandVersion!=processor.appearanceRevision.load())applyAppearance();
+    if(getWidth()!=processor.editorWidth.load()||getHeight()!=processor.editorHeight.load())setSize(processor.editorWidth.load(),processor.editorHeight.load());
+    const bool synced=processor.state.getRawParameterValue("delaySync")->load()>.5f;
+    const bool studio=processor.state.getRawParameterValue("vocalQuality")->load()>.5f,installed=processor.state.getRawParameterValue("speechEngine")->load()>.5f;
+    for(auto& knob:knobs){const auto id=knob->getComponentID();if(id=="delayMs")knob->setEnabled(!synced);
+        if(id=="vocalFormant"||id=="tuneAmount"||id=="tuneSpeed")knob->setEnabled(studio);
+        if(id=="voicePitch"||id=="voiceFormant"||id=="voiceBreath"||id=="voiceGrit"||id=="voiceRobot"||id=="voiceWidth")knob->setEnabled(!installed);}
+    for(auto& menu:menus){if(menu->getComponentID()=="tuneKey"||menu->getComponentID()=="tuneScale")menu->setEnabled(studio);if(menu->getComponentID()=="voiceStyle")menu->setEnabled(!installed);}
     left=animated?std::max(processor.meterL.load(),left*.84f):processor.meterL.load();right=animated?std::max(processor.meterR.load(),right*.84f):processor.meterR.load();
     if(previewTicks>0&&--previewTicks==0)processor.keyboard.noteOff(1,60,0);
     if(page==3)for(auto& s:steps)if(s)s->refresh(processor.activeStep.load());
@@ -163,20 +185,20 @@ void FreshLabEditor::drawEq(Graphics& g,Rectangle<float> a){
     g.drawText("Dynamic cut: "+String(processor.dynamicMeter.load(),1)+" dB",a.getRight()-260,a.getY()+3,250,18,Justification::right);
 }
 void FreshLabEditor::paint(Graphics& g){
-    g.fillAll(look.background);const int logoOffset=logo.isValid()?60:0;if(logo.isValid())g.drawImageWithin(logo,26,22,48,48,RectanglePlacement::centred);
+    g.fillAll(look.background);g.addTransform(AffineTransform::scale(getWidth()/1240.0f,getHeight()/940.0f));const int logoOffset=logo.isValid()?60:0;if(logo.isValid())g.drawImageWithin(logo,26,22,48,48,RectanglePlacement::centred);
     g.setColour(look.accent);g.setFont(32);g.drawFittedText(titleText,28+logoOffset,20,680-logoOffset,45,Justification::left,1);g.setFont(12);g.setColour(muted);g.drawText(taglineText,30+logoOffset,67,710-logoOffset,20,Justification::left);
     g.setColour(look.panel);g.fillRoundedRectangle(190,112,1020,672,12);
     auto label=[&](const String& text,int x,int y,int w=940,int h=25,float size=13){g.setColour(muted);g.setFont(size);g.drawFittedText(text,x,y,w,h,Justification::left,2);};
-    if(page==0){label("Choose an engine, then play the Piano roll or keyboard below. Shape the 808 layers on 808 BUILDER.",216,630);label("Vocal FX and Equalizer process every engine. The original voice bank and generated phrases can be exported as WAV.",216,671);}
-    if(page==1){label("Name",216,126,220,22,12);label("Type to adlib / original formant synthesis",466,126,600,22,12);label("Loaded: "+processor.sampleName(),216,656,950,28,17);label("Change the design knobs, then Generate phrase. Playback pitch, start, root and reverse affect the current sample immediately.",216,703,950,30,12);label("Generated voices are electronic, with rule-based English pronunciation. Original generated audio: CC0.",216,742,950,25,12);}
+    if(page==0){label("Choose an engine, then play the Piano roll or keyboard below. Shape the 808 layers on 808 BUILDER.",216,630);label("MPE uses lower-zone member channels 2-16 (48-st bend) and channel 1 as master. Legato overlaps slide between notes.",216,671,950,30,12);}
+    if(page==1){label("Name",216,126,220,22,12);label("Type to adlib / original or installed voice",466,126,600,22,12);label("Loaded: "+processor.sampleName(),216,656,950,28,17);label("Change the design knobs, then Generate phrase. Playback pitch, start, root and reverse affect the current sample immediately.",216,703,950,30,12);label("Original uses electronic synthesis (CC0). Installed voices use your OS pronunciation and voice license; only Speech speed applies.",216,742,950,25,12);}
     if(page==2){label("Draw the pitch shape by dragging any of the eight points. Curve values are semitones relative to the played note.",216,705);label("Sub, punch, click and buzz layers combine before the 808 filter and effects rack.",216,742);}
     if(page==3){label("Each step: click its action, then set pitch (upper slider) and velocity (lower slider). Reverse and echo throws are per step.",216,692,950,32,12);label("Follow FL transport uses host tempo and position. Turn it off to run independently at Internal tempo.",216,738,950,25,12);}
-    if(page==4){label("EQ > dynamic EQ > de ess > compressor > distortion > delay + room > doubler + harmony > width > output.",216,701,950,30,12);label("Harmony uses a creative delay-based pitch effect; its short delay adds to the original vocal.",216,741,950,24,12);}
+    if(page==4){label("EQ > dynamic EQ > de ess > compressor > distortion > delay + room > vocal layers > width > output > limiter.",216,701,950,30,12);label("Live keeps latency low. Studio enables formants and tuning; switch quality while stopped. Host latency: "+String(processor.getLatencySamples())+" samples.",216,741,950,24,12);}
     if(page==5)drawEq(g,Rectangle<float>(216,601,948,144));
     if(page==6){label("Each pad chooses an engine, sound pitch, original/custom voice and a two-second effect combination.",216,705);label("Click a pad or enable MIDI notes 36-43. The synth pads release automatically; 808s and adlibs decay or finish.",216,742,950,24,12);}
     if(page==7){label("SAVE A SOUND",216,145,600,24,14);label("YOUR SAVED SOUNDS",216,244,600,24,14);label("Save a complete patch or only a voice, instrument, EQ, or effects chain. Voice entries embed their audio.",216,426);label("Loading an EQ keeps your instrument and voice. Loading a voice keeps your current EQ and effects.",216,470);label("Complete sounds also remember your sequencer, performance pads, logo and appearance.",216,514);label("Your sound files can be copied between Windows and Mac. Use Import .freshlab to load a file from another folder.",216,580,950,40,12);}
     if(page==8){label("PLUGIN NAME",216,147,450,22,12);label("TAGLINE",216,227,670,22,12);label("ACCENT / HEX",216,307,190,22,12);label("BACKGROUND",430,307,220,22,12);label("KNOB STYLE",674,307,220,22,12);label("Add your own PNG/JPEG logo, choose any accent colour and change how the knobs and meters look.",216,570);label("Appearance is saved in the FL Studio project and complete sounds. Scan names stay FreshLab / FreshLab FX.",216,618,950,35,12);}
-    g.setColour(muted);g.setFont(12);g.drawFittedText(status.isEmpty()?"Ready / FreshLab 0.2 / all sound controls support host automation":status,192,799,740,30,Justification::left,2);
+    g.setColour(muted);g.setFont(12);g.drawFittedText(status.isEmpty()?"Ready / FreshLab 0.3":status,192,799,740,30,Justification::left,2);
     for(int c=0;c<2;++c){const float level=c==0?left:right;g.setColour(edge);g.fillRoundedRectangle(974,float(799+c*14),236,8,3);g.setColour(level>.96f?Colour(0xffff987d):look.accent);g.fillRoundedRectangle(974,float(799+c*14),std::clamp(level,0.0f,1.0f)*236,8,3);}
     if(!FreshLabProcessor::instrument){g.setColour(look.panel);g.fillRoundedRectangle(190,840,1020,70,8);label("FRESHLAB FX / Insert on an FL Studio Mixer channel to process vocals, drums, synths and recorded adlibs.",216,860);}
 }
