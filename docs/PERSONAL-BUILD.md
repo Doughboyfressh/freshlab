@@ -70,8 +70,8 @@ python scripts/benchmark.py --build-dir build
 
 On headless Linux, prefix the validator with `xvfb-run -a`. On a Mac,
 `--auval` additionally installs both components temporarily in the per-user
-AU folder, tests them, then removes them. It refuses to overwrite an existing
-component. CI also sets `FRESHLAB_TEST_SYSTEM_SPEECH=1` when running CTest to
+AU folder, refreshes the current user’s AU registrar, waits for discovery, tests them,
+then removes them. It refuses to overwrite an existing component. CI also sets `FRESHLAB_TEST_SYSTEM_SPEECH=1` when running CTest to
 exercise the installed-voice path on Windows and Mac.
 
 `FreshLab-validation-Windows` / `FreshLab-validation-macOS` include CTest

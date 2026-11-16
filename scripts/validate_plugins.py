@@ -5,6 +5,8 @@ import hashlib
 import os
 from pathlib import Path
 import platform
+import plistlib
+import time
 import shutil
 import subprocess
 import urllib.request
@@ -54,6 +56,65 @@ def run_logged(command, log, timeout=600):
     return True
 
 
+def refresh_au_registry():
+    # VST3 validation may have primed the registrar before these AUs existed.
+    # Restart only the current user's registrar; launchd starts it on demand.
+    subprocess.run(['/usr/bin/killall', 'AudioComponentRegistrar'],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+
+
+def validate_audio_units(build, reports):
+    if platform.system() != 'Darwin':
+        raise RuntimeError('--auval requires macOS')
+    components = Path.home() / 'Library/Audio/Plug-Ins/Components'
+    components.mkdir(parents=True, exist_ok=True)
+    plans = []
+    for target, product, kind, code in [('FreshLab', 'FreshLab', 'aumu', 'Frsi'),
+                                       ('FreshLabFX', 'FreshLab FX', 'aufx', 'Frfx')]:
+        source = build / f'{target}_artefacts/Release/AU/{product}.component'
+        destination = components / source.name
+        if destination.exists():
+            raise RuntimeError(f'Refusing to replace an existing AU: {destination}')
+        with (source / 'Contents/Info.plist').open('rb') as stream:
+            info = plistlib.load(stream)
+        descriptions = {(c.get('type'), c.get('subtype'), c.get('manufacturer'))
+                        for c in info.get('AudioComponents', [])}
+        identity = (kind, code, 'Frsh')
+        if identity not in descriptions:
+            raise RuntimeError(f'AU metadata mismatch in {source}: {descriptions}')
+        plans.append((target, source, destination, identity))
+    installed = []
+    try:
+        # Install both before discovery; keep them installed through both tests.
+        for target, source, destination, identity in plans:
+            installed.append(destination)
+            subprocess.run(['ditto', str(source), str(destination)], check=True)
+            print(f'Installed for AU validation: {destination} ({identity})')
+        refresh_au_registry()
+        expected = {p[3] for p in plans}
+        for attempt in range(20):
+            scan = subprocess.run(['/usr/bin/auval', '-a'], capture_output=True, text=True, timeout=30)
+            listing = scan.stdout + scan.stderr
+            (reports / 'auval-components.txt').write_text(listing, encoding='utf-8')
+            found = {tuple(line.split()[:3]) for line in listing.splitlines() if len(line.split()) >= 3}
+            if expected.issubset(found):
+                break
+            if attempt == 19:
+                raise RuntimeError(f'AU registrar did not discover {expected - found}; inspect auval-components.txt')
+            time.sleep(1)
+        passed = True
+        for target, source, destination, identity in plans:
+            passed = run_logged(['/usr/bin/auval', '-v', *identity],
+                                reports / f'auval-{target}.txt', timeout=300) and passed
+        return passed
+    finally:
+        for destination in installed:
+            if destination.exists():
+                shutil.rmtree(destination)
+        if installed:
+            refresh_au_registry()
+
+
 def validate(build_dir, pluginval=None, auval=False):
     build = Path(build_dir).resolve()
     reports = build / 'reports'
@@ -66,24 +127,7 @@ def validate(build_dir, pluginval=None, auval=False):
                              '--timeout-ms', '120000', '--validate', str(bundle),
                              '--output-dir', str(reports)], reports / f'pluginval-{target}.txt') and passed
     if auval:
-        if platform.system() != 'Darwin':
-            raise RuntimeError('--auval requires macOS')
-        # Explicit opt-in: auval discovers AUs through the per-user installation.
-        components = Path.home() / 'Library/Audio/Plug-Ins/Components'
-        components.mkdir(parents=True, exist_ok=True)
-        for target, product, kind, code in [('FreshLab', 'FreshLab', 'aumu', 'Frsi'),
-                                           ('FreshLabFX', 'FreshLab FX', 'aufx', 'Frfx')]:
-            source = build / f'{target}_artefacts/Release/AU/{product}.component'
-            destination = components / source.name
-            if destination.exists():
-                raise RuntimeError(f'Refusing to replace an existing AU: {destination}')
-            try:
-                subprocess.run(['ditto', str(source), str(destination)], check=True)
-                passed = run_logged(['/usr/bin/auval', '-v', kind, code, 'Frsh'],
-                                    reports / f'auval-{target}.txt', timeout=300) and passed
-            finally:
-                if destination.exists():
-                    shutil.rmtree(destination)
+        passed = validate_audio_units(build, reports) and passed
     if not passed:
         raise RuntimeError(f'Native plugin validation failed; inspect {reports}')
 
