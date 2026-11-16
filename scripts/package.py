@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import platform
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -19,12 +20,15 @@ def package(build_dir, output_dir):
     system = platform.system()
     if system not in ("Windows", "Darwin"):
         raise RuntimeError("Native packages must be built on Windows or macOS.")
-    version = "0.2.0"
+    version = re.search(r"project\(FreshLab VERSION ([0-9.]+)", (root / "CMakeLists.txt").read_text()).group(1)
     label = "Windows-x64" if system == "Windows" else "macOS-universal"
     name = f"FreshLab-{version}-{label}"
     revision = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=root, text=True
     ).strip()
+    dirty = subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=normal"], cwd=root, text=True)
+    if dirty.strip():
+        raise RuntimeError("Commit source and previews before packaging so the included source matches the build.")
     juce = build_dir / "_deps" / "juce-src"
     if not (juce / "LICENSE.md").is_file():
         raise RuntimeError("The pinned JUCE source and license must accompany the package.")
@@ -62,6 +66,11 @@ def package(build_dir, output_dir):
         for filename in ("THIRD-PARTY.md", "JUCE-8.0.12-LICENSE.md", "VALIDATION.md", "INSTALL.md"):
             shutil.copy2(root / "docs" / filename, stage / filename)
         shutil.copy2(juce / "LICENSE.md", notices / "JUCE-LICENSE.md")
+        for filename in ("Signalsmith-Stretch-LICENSE.txt", "Signalsmith-Linear-LICENSE.txt"):
+            shutil.copy2(root / "Source/ThirdParty" / filename, notices / filename)
+        shutil.copy2(root / "docs/PERSONAL-BUILD.md", stage / "PERSONAL-BUILD.md")
+        if (build_dir / "reports").is_dir():
+            shutil.copytree(build_dir / "reports", stage / "Validation")
         source_dir = stage / "Source"
         source_dir.mkdir()
         subprocess.run(

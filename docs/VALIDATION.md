@@ -1,3 +1,11 @@
+# Current personal build: FreshLab 0.3.0
+
+See [PERSONAL-BUILD.md](PERSONAL-BUILD.md) for the new functionality, verification
+commands and the personal-host checks still needed. Native CI now runs five
+CTest suites, pluginval level 5, Mac auval and synthetic CPU measurements on
+`windows-latest` and `macos-latest`; the run reports establish actual results.
+The remainder of this document preserves the previous 0.2 verification record.
+
 # Validation — FreshLab 0.2.0 source prototype
 
 Checked November 15, 2026 (America/Los_Angeles), on Linux x86_64 with GCC

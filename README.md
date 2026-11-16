@@ -1,18 +1,20 @@
-# FreshLab 0.2.0
+# FreshLab 0.3.0 — personal build
 
-An expanded source prototype of an FL Studio instrument and mixer-effects
-suite for Windows and Mac. This update implements all nine customization
-areas requested: voice design, type-to-adlib, sequencing, layered 808s,
-vocal doubling/harmony, dynamic EQ, performance pads, a personal sound
-library, and custom appearance.
+A personal FL Studio instrument and mixer-effects suite for Windows and Mac.
+FreshLab includes 808s, a poly synth, an adlib sampler, offline voice generation,
+sequencing and a shared effects rack.
 
-**Delivery status:** Windows x64 compilation, all four test suites and native
-packaging passed in [GitHub Actions](https://github.com/Doughboyfressh/freshlab/actions).
-The first Mac universal build compiled but failed two float-equality assertions;
-the recall tests now allow small normalization rounding differences. Check
-Actions for the latest results and downloadable native packages. Actual FL
-Studio host validation remains outstanding. The supplied WAVs can be used
-immediately in FL Studio without compiling anything.
+This update adds Live/Studio vocal modes, formant-compensated spectral harmony,
+optional monophonic pitch correction, an installed-system-voice option, 4x
+oversampled distortion, smoothed EQ, adjustable dynamics and rooms, host-synced
+delay, external compressor sidechain, lower-zone MPE, legato slides, a lookahead
+sample-peak limiter, and a resizable editor.
+
+[Personal build notes](docs/PERSONAL-BUILD.md) explain the controls and remaining
+host-specific checks. [Actions](https://github.com/Doughboyfressh/freshlab/actions)
+contains native test/hosting reports and download packages. These are unsigned
+builds for personal use; publisher accounts, signing and notarization are not
+part of this work.
 
 ## Previews
 
@@ -32,14 +34,14 @@ uploads `FreshLab-previews-Windows` and `FreshLab-previews-macOS` artifacts.
 | Page | Controls and behavior |
 | --- | --- |
 | SOURCE | Mono 808, 16-voice synth, adlib sampler; envelope, glide, detune, four waveforms, low-pass tone control |
-| VOICE DESIGN | Type up to 100 English characters; choose Sub/Spark/Haze/Circuit; set pitch, formant, breath, grit, robot texture, speed, stereo spread; generate and export stereo WAV |
+| VOICE DESIGN | Choose the original electronic or installed system speech engine; type up to 100 characters; choose Sub/Spark/Haze/Circuit; set pitch, formant, breath, grit, robot texture, speed, stereo spread; generate and export stereo WAV |
 | 808 BUILDER | Separate sub, punch, click and buzz levels; 808 saturation; draw eight pitch points over an adjustable time span |
 | SEQUENCER | 16 steps, 4/8/16-step patterns, eighth/sixteenth/thirty-second notes, swing, per-step velocity and pitch, double/triple repeats, reverse, echo throws; host-synced or internal tempo |
-| VOCAL FX | Compressor, de esser, distortion, delay, room, stereo doubler, editable harmony interval from -12 to +12 semitones, stereo width |
-| EQUALIZER | High pass, low shelf, two parametric mid bands and high shelf; dynamic band with center, Q, threshold and maximum reduction; static response and dynamic reduction meter |
+| VOCAL FX | Compressor, de esser, distortion, delay, room, stereo doubler, editable harmony interval from -12 to +12 semitones, stereo width; Live/Studio quality, monophonic correction, formant control, editable compressor attack/release, room size/decay/damping, synced delay, compressor sidechain, 4x distortion and lookahead limiting |
+| EQUALIZER | High pass, low shelf, two parametric mid bands and high shelf; dynamic band with center, Q, threshold and maximum reduction; editable detector attack/release, static response and dynamic reduction meter |
 | PERFORMANCE | Eight clickable/MIDI pads, each with an engine, MIDI pitch, original/custom voice and Clean/Drive/Echo/Space combination |
 | SOUND LIBRARY | Save/load complete patches, individual voices, instruments, EQs, or effects chains; import portable .freshlab files |
-| APPEARANCE | Your plugin name and tagline, arbitrary accent color, three backgrounds, three knob styles, optional animated meters, imported PNG/JPEG logo |
+| APPEARANCE | Your plugin name and tagline, arbitrary accent color, three backgrounds, three knob styles, optional animated meters, imported PNG/JPEG logo; resizable 868×658 to 1860×1410 editor |
 
 Both plugins include the same mixer-effects rack. **FreshLab** is the
 instrument. **FreshLab FX** is the insert for existing audio. Instrument-only
@@ -60,10 +62,13 @@ royalties. They are nonexclusive. See `Voices/VOICE-LICENSE.txt` and the full
 CC0 legal code included alongside it. Imported recordings retain their own
 rights; software dependency licenses are separate.
 
-The speech engine is **stylized rule-based English formant synthesis**. Its
+The Original speech engine is **stylized rule-based English formant synthesis**. Its
 pronunciation is approximate and electronic, especially for unfamiliar names
 or unusual spelling. It does not provide neural/natural speech, voice
-cloning or arbitrary-language pronunciation.
+cloning or arbitrary-language pronunciation. The optional Installed system voice
+engine renders offline using the default Windows/macOS voice and its pronunciation
+dictionary. Only Speech speed applies to that engine. Its output is subject to
+the installed voice provider’s terms, not the original engine’s CC0 dedication.
 
 `docs/voice-preview.wav` plays the eight typed examples first, then the
 original 24-adlib bank. `Examples/Voices/manifest.json` records the typed
@@ -109,7 +114,7 @@ targets on GitHub Actions. After a successful run, its Artifacts section has
 bundles, standalone apps, Mac Audio Units, the voice bank, and matching source.
 These are unsigned development packages; native build results are visible in
 [Actions](https://github.com/Doughboyfressh/freshlab/actions).
-See `docs/INSTALL.md` for installation and the FL Studio test checklist.
+See `docs/INSTALL.md` for installation and `docs/PERSONAL-BUILD.md` for the personal FL Studio check.
 
 ## Load in FL Studio
 
@@ -126,6 +131,10 @@ The plugin's scan names and identity remain FreshLab / FreshLab FX even if
 you change the displayed branding.
 
 ## Design a voice
+
+Choose Original for electronic synthesis with the full design controls, or
+Installed system voice for offline OS pronunciation. Only Speech speed affects
+the installed voice; the remaining steps apply to Original unless stated.
 
 1. On VOICE DESIGN, enter a voice name and a short English phrase.
 2. Set the character and design knobs, then click **Generate phrase**.
@@ -182,7 +191,7 @@ readable; new controls use their initial defaults in a fresh instance.
 
 ## Development and voice CLI
 
-The DSP, speech engine and sequencer use dependency-free C++17. A core-only
+The DSP, speech engine and sequencer use portable C++17 with vendored MIT DSP headers; core-only builds do not need JUCE. A core-only
 build also includes the voice-rendering command:
 
 ```bash
@@ -197,26 +206,24 @@ design pitch in semitones, formant multiplier and robot amount. For a
 multi-config Windows build, use its Release executable path instead.
 The original 24-voice bank is reproducible with `python scripts/make_voices.py`.
 
-## Prototype limits
+## Personal-use notes
 
-- Actual FL Studio scanning/live audio/rendering, AU hosting, signing,
-  notarization and installer packaging are unvalidated. See Actions for
-  native compilation, automated test and development-package results.
-- The new speech engine sounds electronic and uses limited spelling rules.
-- Harmony uses moving delay grains and period estimation. It is a creative
-  vocal effect, best with single-note sources. It can warble on complex
-  audio and is not studio pitch correction or formant-preserving shifting.
-- Doubler/harmony wet layers have short inherent delays; the dry signal is
-  not delayed. The plugin reports zero processing latency for the dry path.
-- EQ/parameter changes are generally at block boundaries, not sample-smoothed.
-  Distortion has no oversampling; extreme drive can alias. The dynamic EQ is
-  a detector-controlled subtractive band, with fixed attack/release.
-- Fixed room size, fixed compressor attack/release, millisecond delay time;
-  no tempo-synced delay, external sidechain, MPE or FL native slide notes.
-- The active rack has a hard output ceiling, not a mastering lookahead limiter.
-  Bypass returns the incoming signal unchanged.
-- CPU performance under native low-latency host workloads has not been certified.
-  The editor currently has a fixed size of 1240 by 940.
+- Choose **Live** for playing; it retains the creative grain-based vocal layers.
+  Choose **Studio** for spectral/formant processing and optional monophonic
+  tuning when rendering. Studio adds latency, reported to the host; change
+  quality while transport is stopped. Dense/polyphonic audio can still produce
+  pitch artifacts, and tuning is intended for a single pitched voice.
+- The limiter anticipates sample peaks by 3 ms. It is not an inter-sample
+  true-peak limiter. Bypass preserves incoming samples with matching latency.
+- FL-native slide-note events are proprietary to native FL plugins. For these
+  VST3s, enable Legato and overlap notes to glide, or use MIDI pitch bend/MPE.
+- Installed system speech depends on the voices installed on your computer.
+  Original remains the electronic engine and the only generated-speech mode
+  covered by this project’s CC0 dedication.
+- Automated host and CPU reports supplement trying the build on your own
+  hardware in current FL Studio. No FL Studio session is available in this
+  Linux workspace; scanning, your audio interface and project rendering need
+  that final personal-host check.
 
 See `docs/VALIDATION.md` for the checks actually run. Original source is MIT;
 original audio is CC0. JUCE and its bundled SDK code keep their own terms;

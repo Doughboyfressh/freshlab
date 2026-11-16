@@ -60,6 +60,7 @@ private:
     juce::TextButton importVoice{"Import audio"},generate{"Generate phrase"},exportVoice{"Export WAV"},audition{"Play voice"},panic{"Panic"};
     juce::TextButton saveSound{"Save current sound"},loadSound{"Load selected"},refreshLibrary{"Refresh"},importSound{"Import .freshlab"};
     juce::TextButton applyBrand{"Apply appearance"},importLogo{"Import logo"},clearLogo{"Clear logo"},clearSteps{"Clear pattern"},fillSteps{"Starter pattern"};
+    juce::ToggleButton mpe{"MPE lower zone"},legato{"Legato / overlapping-note slides"},delaySync{"Sync to host"},externalSidechain{"Compressor: use external sidechain"};
     juce::ToggleButton reverse{"Reverse"},oneShot{"One shot"},bypass{"Bypass effects"},seqEnabled{"Run pattern"},seqSync{"Follow FL transport"},curveEnabled{"Use drawn pitch curve"},padMidi{"MIDI 36-43 play the pads"},animation{"Animate meters"};
     juce::MidiKeyboardComponent keyboard;
     std::unique_ptr<juce::FileChooser> chooser;
