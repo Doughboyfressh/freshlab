@@ -50,6 +50,11 @@ def package(build_dir, output_dir):
                     shutil.copy2(source, destination)
         for folder in ("Voices", "Examples"):
             shutil.copytree(root / folder, stage / folder)
+        previews = stage / "Previews"
+        previews.mkdir()
+        shutil.copytree(root / "docs" / "ui", previews / "ui")
+        for filename in ("voice-preview.wav", "dsp-preview.wav"):
+            shutil.copy2(root / "docs" / filename, previews / filename)
         for filename in ("README.md", "LICENSE"):
             shutil.copy2(root / filename, stage / filename)
         notices = stage / "Notices"

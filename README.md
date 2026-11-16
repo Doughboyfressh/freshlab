@@ -6,11 +6,26 @@ areas requested: voice design, type-to-adlib, sequencing, layered 808s,
 vocal doubling/harmony, dynamic EQ, performance pads, a personal sound
 library, and custom appearance.
 
-**Delivery status:** both Linux VST3 plugins and standalone targets compile;
-DSP and processor integration tests pass. Windows/Mac native builds and
-actual FL Studio host validation remain outstanding. This source archive
-contains no installable Windows/Mac plugin binaries. The supplied WAVs can
-be used immediately in FL Studio without compiling anything.
+**Delivery status:** Windows x64 compilation, all four test suites and native
+packaging passed in [GitHub Actions](https://github.com/Doughboyfressh/freshlab/actions).
+The first Mac universal build compiled but failed two float-equality assertions;
+the recall tests now allow small normalization rounding differences. Check
+Actions for the latest results and downloadable native packages. Actual FL
+Studio host validation remains outstanding. The supplied WAVs can be used
+immediately in FL Studio without compiling anything.
+
+## Previews
+
+![FreshLab instrument editor](docs/ui/instrument-source.png)
+
+[All nine instrument pages and four FX pages](docs/ui/README.md) are software
+renders of the actual JUCE editors. Audio downloads:
+
+- [Voice preview](docs/voice-preview.wav): eight typed phrases, then all 24 original adlibs.
+- [808 and synth preview](docs/dsp-preview.wav): 12 seconds rendered by the DSP test tool.
+
+Native packages include a `Previews/` folder. Each successful CI run also
+uploads `FreshLab-previews-Windows` and `FreshLab-previews-macOS` artifacts.
 
 ## What's included
 
@@ -184,8 +199,9 @@ The original 24-voice bank is reproducible with `python scripts/make_voices.py`.
 
 ## Prototype limits
 
-- Native Windows/Mac compilation, FL Studio scanning/live audio/rendering,
-  AU hosting, signing, notarization and installer packaging are unvalidated.
+- Actual FL Studio scanning/live audio/rendering, AU hosting, signing,
+  notarization and installer packaging are unvalidated. See Actions for
+  native compilation, automated test and development-package results.
 - The new speech engine sounds electronic and uses limited spelling rules.
 - Harmony uses moving delay grains and period estimation. It is a creative
   vocal effect, best with single-note sources. It can warble on complex

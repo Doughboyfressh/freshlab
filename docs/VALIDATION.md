@@ -42,21 +42,50 @@ editors, not images of FL Studio. Expanded UI dimensions are 1240 by 940.
   judgment about human naturalness, pronunciation quality or mix quality is
   claimed. The generated speech is intentionally electronic.
 
+## Native build recovery — November 16, 2026 (UTC)
+
+The [first native run](https://github.com/Doughboyfressh/freshlab/actions/runs/43812760134)
+compiled Windows x64 and universal macOS targets. Windows passed all four
+CTest suites and produced the `FreshLab-Windows` development package.
+Mac passed the core DSP and extension suites, but stopped before packaging:
+the instrument and FX suites used exact float equality for recalled gains.
+Fused multiply-add in range normalization can return -3.000000477 instead
+of -3 dB, or -0.999999046 instead of -1 dB.
+
+Continuous parameter assertions now use a 0.00001 absolute tolerance with
+actual/expected diagnostics. Integer and choice assertions remain exact.
+The FX recall test now changes harmony, doubler and dynamic EQ controls
+before restoring and checking them. The latest native results are in
+[Actions](https://github.com/Doughboyfressh/freshlab/actions).
+
+The missing UI and audio previews are regenerated from the committed source
+and voice bank, and tracked in `docs/ui/`, `docs/voice-preview.wav` and
+`docs/dsp-preview.wav`. CI writes its own editor/audio previews and uploads
+them separately; failed builds retain CTest diagnostic logs. Native packages
+include the committed previews alongside the source archive.
+
+The recovery was checked locally on Linux x86_64 with GCC 14.2, Release and
+JUCE 8.0.12: all four CTest suites pass under Xvfb, with nine instrument and
+four FX renders at 1240 by 940. Both audio previews are stereo 44.1 kHz PCM16;
+the voice preview is 27.33 seconds and the DSP demo is 12 seconds. All 32
+source WAV hashes still match their manifests, and all 32 preview segments
+match the source audio exactly (mono bank files are duplicated to stereo).
+
 ## Still outstanding
 
-Native Windows x64 and macOS universal compilation, AU host loading,
-installer packaging, signing/notarization, actual FL Studio scanning, live
-playback/export, automation and cross-platform project reopening have not
-been validated. Supplied native build scripts and the GitHub Actions matrix
-are prepared, but no native workflow run occurred in this delivery.
+AU host loading, installer packaging, signing/notarization, actual FL Studio
+scanning, live playback/export, automation and cross-platform project
+reopening have not been validated. Native compilation and automated test
+results are recorded separately in Actions as described above.
 
 Prolonged low-latency CPU performance, many simultaneous instances,
 real-time glitch behavior during import/state replacement, host crash
 recovery and production release readiness have not been certified.
 
-This is a source prototype plus a directly usable original WAV pack.
-Windows/Mac plugin binaries are not included. Linux standalone apps were
-compiled, not tested against an audio device.
+This repository is a source prototype plus a directly usable original WAV
+pack. Native development binaries are distributed as Actions artifacts,
+rather than checked into Git. Linux standalone apps were compiled, not
+tested against an audio device.
 
 ## Reproduce
 

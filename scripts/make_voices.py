@@ -8,6 +8,7 @@ import random
 import struct
 import wave
 from pathlib import Path
+from make_previews import write_voice_preview
 
 RATE = 44100
 ROOT = Path(__file__).resolve().parents[1]
@@ -92,14 +93,12 @@ def write(path, samples):
 def main():
     destination = ROOT / 'Voices'
     destination.mkdir(exist_ok=True)
-    preview = []
     for si, style in enumerate(STYLES):
         for pi, phrase in enumerate(PHRASES):
             audio = make(style, phrase, 1000 + si*20 + pi)
             write(destination / f'{style}_{phrase}.wav', audio)
-            preview.extend(audio + [0.0] * int(RATE*.18))
-    write(ROOT / 'docs' / 'voice-preview.wav', preview)
-    print(f'Created {len(STYLES)*len(PHRASES)} original voices, {len(preview)/RATE:.1f}s preview')
+    write_voice_preview(ROOT / 'docs' / 'voice-preview.wav')
+    print(f'Created {len(STYLES)*len(PHRASES)} original voices')
 
 if __name__ == '__main__':
     main()
